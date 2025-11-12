@@ -7,12 +7,8 @@ MINIO_PORT=9000
 MINIO_CONSOLE_PORT=9001
 MINIO_VOLUME?=./minio
 
-
 ifeq ($(OS),Windows_NT)
-	# Avoid running PowerShell during Makefile parse (some profiles write to stdout).
-	# Use the current directory and the configured volume so we get an absolute
-	# Windows path without invoking PowerShell at parse-time.
-	MINIO_VOLUME_ABS := $(CURDIR)\$(MINIO_VOLUME)
+	MINIO_VOLUME_ABS := $(shell powershell -Command "[System.IO.Path]::GetFullPath('$(MINIO_VOLUME)')")
 	MKDIR_CMD = if not exist $(MINIO_VOLUME) mkdir $(MINIO_VOLUME)
 	CMD_PREFIX = cmd /c
 else
@@ -30,7 +26,7 @@ minio-up:
 		-e MINIO_ROOT_USER=$(MINIO_ACCESS_KEY) \
 		-e MINIO_ROOT_PASSWORD=$(MINIO_SECRET_KEY) \
 		-v $(MINIO_VOLUME_ABS):/data \
-		minio/minio server /data --console-address ":$(MINIO_CONSOLE_PORT)"
+		minio/minio server /data --console-address ":9001"
 
 minio-down:
 	- docker rm -f $(MINIO_CONTAINER)

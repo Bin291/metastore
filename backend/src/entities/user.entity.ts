@@ -1,0 +1,71 @@
+import {
+  Column,
+  Entity,
+  Index,
+  OneToMany,
+  Unique,
+} from 'typeorm';
+import { BaseEntity } from '../common/entities/base.entity';
+import { Invite } from './invite.entity';
+import { ShareLink } from './share-link.entity';
+import { FileObject } from './file-object.entity';
+import { Notification } from './notification.entity';
+import { UserRole } from '../common/enums/user-role.enum';
+import { UserStatus } from '../common/enums/user-status.enum';
+
+@Entity({ name: 'users' })
+@Unique(['username'])
+@Index('idx_users_role', ['role'])
+export class User extends BaseEntity {
+  @Column({ length: 64 })
+  username: string;
+
+  @Column({ name: 'password_hash' })
+  passwordHash: string;
+
+  @Column({
+    type: 'enum',
+    enum: UserRole,
+    default: UserRole.USER,
+  })
+  role: UserRole;
+
+  @Column({
+    type: 'enum',
+    enum: UserStatus,
+    default: UserStatus.ACTIVE,
+  })
+  status: UserStatus;
+
+  @Column({ name: 'email', length: 255, nullable: true, unique: true })
+  email?: string | null;
+
+  @Column({ name: 'bucket_prefix', length: 255 })
+  bucketPrefix: string;
+
+  @Column({ name: 'last_login_at', type: 'timestamptz', nullable: true })
+  lastLoginAt?: Date | null;
+
+  @Column({ name: 'profile_metadata', type: 'simple-json', nullable: true })
+  profileMetadata?: Record<string, unknown> | null;
+
+  @Column({ name: 'refresh_token_hash', nullable: true })
+  refreshTokenHash?: string | null;
+
+  @OneToMany(() => Invite, (invite) => invite.createdBy, {
+    cascade: false,
+  })
+  invitesCreated: Invite[];
+
+  @OneToMany(() => ShareLink, (shareLink) => shareLink.createdBy, {
+    cascade: false,
+  })
+  shareLinks: ShareLink[];
+
+  @OneToMany(() => FileObject, (file) => file.owner)
+  files: FileObject[];
+
+  @OneToMany(() => Notification, (notification) => notification.user)
+  notifications: Notification[];
+}
+

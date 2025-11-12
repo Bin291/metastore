@@ -1,98 +1,187 @@
-<p align="center">
-  <a href="http://nestjs.com/" target="blank"><img src="https://nestjs.com/img/logo-small.svg" width="120" alt="Nest Logo" /></a>
-</p>
+<h1 align="center">MetaStore Backend</h1>
 
-[circleci-image]: https://img.shields.io/circleci/build/github/nestjs/nest/master?token=abc123def456
-[circleci-url]: https://circleci.com/gh/nestjs/nest
+MetaStore is a NestJS-based API for managing secure file storage, approval workflows, and shareable access links.  
+It integrates with MinIO for S3-compatible object storage, PostgreSQL (or SQLite) for metadata, Redis for real-time messaging, and optional Supabase services.
 
-  <p align="center">A progressive <a href="http://nodejs.org" target="_blank">Node.js</a> framework for building efficient and scalable server-side applications.</p>
-    <p align="center">
-<a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/v/@nestjs/core.svg" alt="NPM Version" /></a>
-<a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/l/@nestjs/core.svg" alt="Package License" /></a>
-<a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/dm/@nestjs/common.svg" alt="NPM Downloads" /></a>
-<a href="https://circleci.com/gh/nestjs/nest" target="_blank"><img src="https://img.shields.io/circleci/build/github/nestjs/nest/master" alt="CircleCI" /></a>
-<a href="https://discord.gg/G7Qnnhy" target="_blank"><img src="https://img.shields.io/badge/discord-online-brightgreen.svg" alt="Discord"/></a>
-<a href="https://opencollective.com/nest#backer" target="_blank"><img src="https://opencollective.com/nest/backers/badge.svg" alt="Backers on Open Collective" /></a>
-<a href="https://opencollective.com/nest#sponsor" target="_blank"><img src="https://opencollective.com/nest/sponsors/badge.svg" alt="Sponsors on Open Collective" /></a>
-  <a href="https://paypal.me/kamilmysliwiec" target="_blank"><img src="https://img.shields.io/badge/Donate-PayPal-ff3f59.svg" alt="Donate us"/></a>
-    <a href="https://opencollective.com/nest#sponsor"  target="_blank"><img src="https://img.shields.io/badge/Support%20us-Open%20Collective-41B883.svg" alt="Support us"></a>
-  <a href="https://twitter.com/nestframework" target="_blank"><img src="https://img.shields.io/twitter/follow/nestframework.svg?style=social&label=Follow" alt="Follow us on Twitter"></a>
-</p>
-  <!--[![Backers on Open Collective](https://opencollective.com/nest/backers/badge.svg)](https://opencollective.com/nest#backer)
-  [![Sponsors on Open Collective](https://opencollective.com/nest/sponsors/badge.svg)](https://opencollective.com/nest#sponsor)-->
+---
 
-## Description
+## ✨ Features
 
-[Nest](https://github.com/nestjs/nest) framework TypeScript starter repository.
+- **Authentication & Authorization**
+  - Username/password with hashed credentials (Argon2)
+  - JWT access + refresh tokens stored in HTTP-only cookies
+  - Role-based guards (`admin`, `user`)
+  - Invite-driven user onboarding
 
-## Project setup
+- **File Pipeline**
+  - Presigned uploads directly to MinIO
+  - Metadata registration & moderation queue
+  - Approval / rejection workflow with audit logs & notifications
+  - Public/private buckets + automatic path prefixes per user
 
-```bash
-$ npm install
+- **Sharing & Collaboration**
+  - Tokenized share links with optional password and expiry
+  - Toggleable access states and permission levels (view / full)
+  - Access analytics (usage counters, last accessed timestamp)
+
+- **Observability**
+  - Audit logging for critical actions
+  - WebSocket gateway for real-time notifications
+  - Modular architecture for future AI moderation and search indexing
+
+---
+
+## 🧱 Project Structure
+
+```
+src/
+  common/         # decorators, enums, guards, shared DTOs
+  config/         # configuration & environment validation
+  entities/       # TypeORM entities
+  modules/
+    auth/         # auth controller, service, JWT strategies
+    users/        # user management & profile updates
+    invites/      # invite tokens lifecycle
+    files/        # file CRUD, moderation, presigned URLs
+    share-links/  # share link creation & toggling
+    storage/      # MinIO (S3) integration
+    notifications/# websocket gateway + DB notifications
+    audit/        # audit log service
 ```
 
-## Compile and run the project
+---
 
-```bash
-# development
-$ npm run start
+## 🔐 Environment Variables
 
-# watch mode
-$ npm run start:dev
+Create a `.env.development` (dev) or `.env` (prod) file alongside the repository.  
+Below is a minimal configuration; adjust to match your environment.
 
-# production mode
-$ npm run start:prod
+```env
+NODE_ENV=development
+PORT=3001
+
+DATABASE_TYPE=postgres          # "postgres" or "sqlite"
+DATABASE_URL=postgres://metastore:metastore@localhost:5432/metastore
+SQLITE_PATH=./data/metastore.db # used when DATABASE_TYPE=sqlite
+
+JWT_ACCESS_SECRET=change-me-access
+JWT_ACCESS_EXPIRES_IN=15m
+JWT_REFRESH_SECRET=change-me-refresh
+JWT_REFRESH_EXPIRES_IN=7d
+AUTH_ACCESS_TOKEN_COOKIE=metastore_access_token
+AUTH_REFRESH_TOKEN_COOKIE=metastore_refresh_token
+AUTH_COOKIE_SAME_SITE=lax       # lax | strict | none
+AUTH_COOKIE_SECURE=false
+
+DEFAULT_ADMIN_USERNAME=admin
+DEFAULT_ADMIN_PASSWORD=ChangeMe123!
+DEFAULT_ADMIN_EMAIL=admin@example.com
+
+MINIO_ENDPOINT=localhost
+MINIO_PORT=9000
+MINIO_USE_SSL=false
+MINIO_ACCESS_KEY=minioadmin
+MINIO_SECRET_KEY=minioadmin
+MINIO_BUCKET_PRIVATE=metastore-private
+MINIO_BUCKET_PUBLIC=metastore-public
+MINIO_BUCKET_PENDING=metastore-pending
+MINIO_BUCKET_REJECTED=metastore-rejected
+MINIO_BUCKET_SANDBOX=metastore-sandbox
+
+REDIS_HOST=localhost
+REDIS_PORT=6379
+REDIS_ENABLED=true
+
+SUPABASE_URL=
+SUPABASE_SERVICE_ROLE=
+
+FRONTEND_URL=http://localhost:3000
 ```
 
-## Run tests
+> ℹ️ The workspace blocks writing `.env` files directly—copy the snippet above manually.
+
+---
+
+## 🚀 Running Locally
+
+```bash
+# 1. install deps
+npm install
+
+# 2. start the API (watch mode)
+npm run start:dev
+
+# 3. run tests (optional)
+npm test
+```
+
+### With Docker Compose (production build)
+
+```bash
+docker compose up --build
+```
+
+Services started:
+- `backend` on port `3001`
+- `frontend` on port `3000`
+- `postgres` on port `5432`
+- `minio` on ports `9000/9001`
+- `redis` on port `6379`
+
+### Hot-reload Development Stack
+
+```bash
+docker compose -f docker-compose.dev.yml up
+```
+
+This mounts the local source folders for rapid iteration.
+
+---
+
+## 🔌 API Highlights
+
+- `POST /auth/login`, `POST /auth/refresh`, `POST /auth/logout`
+- `POST /auth/accept-invite`
+- `GET /users/me`, `PATCH /users/me`
+- `POST /invites`, `PATCH /invites/:id/revoke`
+- `POST /files/upload-url`, `POST /files`, `PATCH /files/:id/(approve|reject)`
+- `POST /share-links`, `PATCH /share-links/:id/toggle`, `POST /share-links/token/:token/access`
+
+Full Swagger/OpenAPI documentation can be added by enabling `SwaggerModule` (not included by default to keep the bootstrap lean).
+
+---
+
+## 🧪 Testing
 
 ```bash
 # unit tests
-$ npm run test
+npm run test
 
 # e2e tests
-$ npm run test:e2e
+npm run test:e2e
 
-# test coverage
-$ npm run test:cov
+# coverage report
+npm run test:cov
 ```
 
-## Deployment
+---
 
-When you're ready to deploy your NestJS application to production, there are some key steps you can take to ensure it runs as efficiently as possible. Check out the [deployment documentation](https://docs.nestjs.com/deployment) for more information.
+## 📦 Deployment Notes
 
-If you are looking for a cloud-based platform to deploy your NestJS application, check out [Mau](https://mau.nestjs.com), our official platform for deploying NestJS applications on AWS. Mau makes deployment straightforward and fast, requiring just a few simple steps:
+- The provided `Dockerfile` builds a production bundle (`npm run build`) and runs `node dist/main.js`.
+- Ensure environment secrets are injected using your orchestrator of choice (Docker secrets, Kubernetes secrets, etc.).
+- For SQLite deployments, mount a persistent volume to retain the `.db` file.
+- Configure MinIO with TLS or point to an S3-compatible provider for production environments.
 
-```bash
-$ npm install -g @nestjs/mau
-$ mau deploy
-```
+---
 
-With Mau, you can deploy your application in just a few clicks, allowing you to focus on building features rather than managing infrastructure.
+## 📚 Further Improvements
 
-## Resources
+- Integrate AI moderation providers via the `ModerationTask` entity.
+- Add RLS-aware queries and Supabase integration.
+- Expand notification gateway with Redis Pub/Sub or message queues.
+- Harden share-link access by issuing presigned downloads scoped to link tokens.
 
-Check out a few resources that may come in handy when working with NestJS:
+---
 
-- Visit the [NestJS Documentation](https://docs.nestjs.com) to learn more about the framework.
-- For questions and support, please visit our [Discord channel](https://discord.gg/G7Qnnhy).
-- To dive deeper and get more hands-on experience, check out our official video [courses](https://courses.nestjs.com/).
-- Deploy your application to AWS with the help of [NestJS Mau](https://mau.nestjs.com) in just a few clicks.
-- Visualize your application graph and interact with the NestJS application in real-time using [NestJS Devtools](https://devtools.nestjs.com).
-- Need help with your project (part-time to full-time)? Check out our official [enterprise support](https://enterprise.nestjs.com).
-- To stay in the loop and get updates, follow us on [X](https://x.com/nestframework) and [LinkedIn](https://linkedin.com/company/nestjs).
-- Looking for a job, or have a job to offer? Check out our official [Jobs board](https://jobs.nestjs.com).
-
-## Support
-
-Nest is an MIT-licensed open source project. It can grow thanks to the sponsors and support by the amazing backers. If you'd like to join them, please [read more here](https://docs.nestjs.com/support).
-
-## Stay in touch
-
-- Author - [Kamil Myśliwiec](https://twitter.com/kammysliwiec)
-- Website - [https://nestjs.com](https://nestjs.com/)
-- Twitter - [@nestframework](https://twitter.com/nestframework)
-
-## License
-
-Nest is [MIT licensed](https://github.com/nestjs/nest/blob/master/LICENSE).
+Made with ❤️ using NestJS 11.
