@@ -1,7 +1,24 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useRef } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import {
+  FiUpload,
+  FiFolder,
+  FiFolderPlus,
+  FiEye,
+  FiDownload,
+  FiTrash2,
+  FiHome,
+  FiImage,
+  FiVideo,
+  FiMusic,
+  FiFileText,
+  FiFile,
+  FiPackage,
+  FiChevronRight,
+  FiArrowUp,
+} from "react-icons/fi";
 import { filesService } from "@/lib/services/files";
 import { FileItem } from "@/types/api";
 import { Button } from "@/components/ui/button";
@@ -22,6 +39,10 @@ export default function FilesPage() {
   const [showCreateFolder, setShowCreateFolder] = useState(false);
   const [previewFile, setPreviewFile] = useState<FileItem | null>(null);
   const [currentPage, setCurrentPage] = useState(1);
+  const [dragActive, setDragActive] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState<Record<string, number>>({});
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const folderInputRef = useRef<HTMLInputElement>(null);
   const limit = 20;
 
   const filesQuery = useQuery({
@@ -37,49 +58,11 @@ export default function FilesPage() {
 
   const uploadFileMutation = useMutation({
     mutationFn: async (file: File) => {
-      const path = file.name;
-      const presigned = await filesService.requestUploadUrl({
-        path,
-        mimeType: file.type,
-        size: file.size,
-        isFolder: false,
-        parentId: currentFolderId || undefined,
-      });
+      const fileId = Math.random().toString(36);
+      setUploadProgress((prev) => ({ ...prev, [fileId]: 0 }));
 
-      if (!presigned) {
-        throw new Error("Unable to create presigned URL");
-      }
-
-      const uploadResponse = await fetch(presigned.url, {
-        method: "PUT",
-        body: file,
-        headers: {
-          "Content-Type": file.type || "application/octet-stream",
-        },
-      });
-
-      if (!uploadResponse.ok) {
-        throw new Error("Failed to upload file to storage");
-      }
-
-      return filesService.registerFile({
-        name: file.name,
-        path,
-        isFolder: false,
-        size: file.size,
-        mimeType: file.type,
-        parentId: currentFolderId || undefined,
-      });
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["files"] });
-    },
-  });
-
-  const uploadFolderMutation = useMutation({
-    mutationFn: async (files: FileList) => {
-      const uploadPromises = Array.from(files).map(async (file) => {
-        const path = (file as any).webkitRelativePath || file.name;
+      try {
+        const path = file.name;
         const presigned = await filesService.requestUploadUrl({
           path,
           mimeType: file.type,
@@ -91,6 +74,8 @@ export default function FilesPage() {
         if (!presigned) {
           throw new Error("Unable to create presigned URL");
         }
+
+        setUploadProgress((prev) => ({ ...prev, [fileId]: 30 }));
 
         const uploadResponse = await fetch(presigned.url, {
           method: "PUT",
@@ -104,7 +89,9 @@ export default function FilesPage() {
           throw new Error("Failed to upload file to storage");
         }
 
-        return filesService.registerFile({
+        setUploadProgress((prev) => ({ ...prev, [fileId]: 70 }));
+
+        const result = await filesService.registerFile({
           name: file.name,
           path,
           isFolder: false,
@@ -112,13 +99,172 @@ export default function FilesPage() {
           mimeType: file.type,
           parentId: currentFolderId || undefined,
         });
+
+        setUploadProgress((prev) => ({ ...prev, [fileId]: 100 }));
+        setTimeout(() => {
+          setUploadProgress((prev) => {
+            const newProgress = { ...prev };
+            delete newProgress[fileId];
+            return newProgress;
+          });
+        }, 500);
+
+        return result;
+      } catch (error) {
+        setUploadProgress((prev) => {
+          const newProgress = { ...prev };
+          delete newProgress[fileId];
+          return newProgress;
+        });
+        throw error;
+      }
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["files"] });
+    },
+  });
+
+  // Helper function to create folder structure and return folder map
+  const createFolderStructure = async (
+    folderPaths: Set<string>
+  ): Promise<Map<string, string>> => {
+    const folderMap = new Map<string, string>(); // path -> folderId
+    const sortedPaths = Array.from(folderPaths).sort();
+
+    for (const fullPath of sortedPaths) {
+      const parts = fullPath.split("/").slice(0, -1); // Remove file name
+      let currentPath = "";
+      let parentId: string | undefined = currentFolderId || undefined;
+
+      for (const part of parts) {
+        if (!part) continue;
+        currentPath = currentPath ? `${currentPath}/${part}` : part;
+
+        // Check if we already created this folder
+        if (folderMap.has(currentPath)) {
+          parentId = folderMap.get(currentPath);
+          continue;
+        }
+
+        try {
+          const result = await filesService.registerFile({
+            name: part,
+            path: currentPath,
+            isFolder: true,
+            parentId: parentId,
+          });
+          folderMap.set(currentPath, result.id);
+          parentId = result.id;
+        } catch (error) {
+          // Folder might already exist, try to find it
+          console.error(`Failed to create folder ${currentPath}:`, error);
+        }
+      }
+    }
+
+    return folderMap;
+  };
+
+  // Helper function to find parent folder for a file
+  const findFileParentId = (
+    filePath: string,
+    folderMap: Map<string, string>
+  ): string | undefined => {
+    const parts = filePath.split("/");
+    // Remove the file name to get folder path
+    const folderPath = parts.slice(0, -1).join("/");
+
+    if (!folderPath) {
+      return currentFolderId || undefined;
+    }
+
+    return folderMap.get(folderPath) || currentFolderId || undefined;
+  };
+
+  const uploadFolderMutation = useMutation({
+    mutationFn: async (files: FileList) => {
+      // First pass: Collect all unique folder paths
+      const pathsSet = new Set<string>();
+      Array.from(files).forEach((file) => {
+        const path = (file as any).webkitRelativePath || file.name;
+        pathsSet.add(path);
+      });
+
+      // Create folders first and get folder IDs
+      const folderMap = await createFolderStructure(pathsSet);
+
+      // Second pass: Upload all files
+      const uploadPromises = Array.from(files).map(async (file, index) => {
+        const fileId = `folder-${index}`;
+        setUploadProgress((prev) => ({ ...prev, [fileId]: 0 }));
+
+        try {
+          const path = (file as any).webkitRelativePath || file.name;
+          const presigned = await filesService.requestUploadUrl({
+            path,
+            mimeType: file.type,
+            size: file.size,
+            isFolder: false,
+            parentId: currentFolderId || undefined,
+          });
+
+          if (!presigned) {
+            throw new Error("Unable to create presigned URL");
+          }
+
+          setUploadProgress((prev) => ({ ...prev, [fileId]: 40 }));
+
+          const uploadResponse = await fetch(presigned.url, {
+            method: "PUT",
+            body: file,
+            headers: {
+              "Content-Type": file.type || "application/octet-stream",
+            },
+          });
+
+          if (!uploadResponse.ok) {
+            throw new Error("Failed to upload file to storage");
+          }
+
+          setUploadProgress((prev) => ({ ...prev, [fileId]: 80 }));
+
+          // Find the correct parent folder for this file
+          const fileParentId = findFileParentId(path, folderMap);
+
+          const result = await filesService.registerFile({
+            name: file.name,
+            path,
+            isFolder: false,
+            size: file.size,
+            mimeType: file.type,
+            parentId: fileParentId,
+          });
+
+          setUploadProgress((prev) => ({ ...prev, [fileId]: 100 }));
+          setTimeout(() => {
+            setUploadProgress((prev) => {
+              const newProgress = { ...prev };
+              delete newProgress[fileId];
+              return newProgress;
+            });
+          }, 500);
+
+          return result;
+        } catch (error) {
+          setUploadProgress((prev) => {
+            const newProgress = { ...prev };
+            delete newProgress[fileId];
+            return newProgress;
+          });
+          throw error;
+        }
       });
 
       return Promise.all(uploadPromises);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["files"] });
-      setCurrentPage(1); // Reset to first page after upload
+      setCurrentPage(1);
     },
   });
 
@@ -155,7 +301,7 @@ export default function FilesPage() {
     const file = event.target.files?.[0];
     if (!file) return;
     await uploadFileMutation.mutateAsync(file);
-    event.target.value = "";
+    if (fileInputRef.current) fileInputRef.current.value = "";
   };
 
   const handleFolderChange = async (
@@ -164,7 +310,35 @@ export default function FilesPage() {
     const files = event.target.files;
     if (!files || files.length === 0) return;
     await uploadFolderMutation.mutateAsync(files);
-    event.target.value = "";
+    if (folderInputRef.current) folderInputRef.current.value = "";
+  };
+
+  const handleDrag = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (e.type === "dragenter" || e.type === "dragover") {
+      setDragActive(true);
+    } else if (e.type === "dragleave") {
+      setDragActive(false);
+    }
+  };
+
+  const handleDrop = async (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setDragActive(false);
+
+    const files = e.dataTransfer.files;
+    if (!files || files.length === 0) return;
+
+    const firstFile = files[0] as any;
+    if (firstFile.webkitRelativePath) {
+      await uploadFolderMutation.mutateAsync(files);
+    } else {
+      for (let i = 0; i < files.length; i++) {
+        await uploadFileMutation.mutateAsync(files[i]);
+      }
+    }
   };
 
   const handleCreateFolder = () => {
@@ -178,55 +352,105 @@ export default function FilesPage() {
 
   return (
     <div className="space-y-6">
-      <Card className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
-        <div>
-          <h2 className="text-lg font-semibold text-white">Your Files</h2>
-          <p className="text-sm text-zinc-500">
-            Upload files, create folders, and manage your storage.
-          </p>
-        </div>
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
-          <Input
-            type="search"
-            placeholder="Search files..."
-            value={search}
-            onChange={(event) => {
-              setSearch(event.target.value);
-              setCurrentPage(1); // Reset to first page on search
-            }}
-            className="w-full sm:w-64"
-          />
-          <div className="flex gap-2">
-            <Input
-              type="file"
-              onChange={handleFileChange}
-              disabled={uploadFileMutation.isPending}
-              className="w-full sm:w-auto"
-            />
-            <Input
-              type="file"
-              webkitdirectory=""
-              directory=""
-              onChange={handleFolderChange}
-              disabled={uploadFolderMutation.isPending}
-              className="w-full sm:w-auto"
-              title="Upload Folder"
-            />
+      {/* Upload Drag-Drop Zone */}
+      <div
+        onDragEnter={handleDrag}
+        onDragLeave={handleDrag}
+        onDragOver={handleDrag}
+        onDrop={handleDrop}
+        className={`relative rounded-2xl border-2 border-dashed p-8 transition-all ${
+          dragActive
+            ? "border-indigo-500 bg-indigo-500/10"
+            : "border-zinc-700 bg-zinc-900/50 hover:border-zinc-600"
+        }`}
+      >
+        <div className="flex flex-col items-center justify-center gap-4">
+          <div className="text-5xl text-indigo-400">
+            <FiArrowUp />
+          </div>
+          <div className="text-center">
+            <h3 className="text-lg font-semibold text-white">
+              Drag files or folders here
+            </h3>
+            <p className="text-sm text-zinc-400">
+              or use the buttons below to upload
+            </p>
+          </div>
+
+          <div className="flex flex-wrap justify-center gap-3">
             <Button
-              variant="outline"
-              onClick={() => setShowCreateFolder(!showCreateFolder)}
+              onClick={() => fileInputRef.current?.click()}
+              disabled={uploadFileMutation.isPending}
+              className="gap-2 bg-indigo-600 hover:bg-indigo-700"
             >
+              <FiUpload className="h-4 w-4" />
+              Upload File
+            </Button>
+            <Button
+              onClick={() => folderInputRef.current?.click()}
+              disabled={uploadFolderMutation.isPending}
+              className="gap-2 bg-purple-600 hover:bg-purple-700"
+            >
+              <FiFolder className="h-4 w-4" />
+              Upload Folder
+            </Button>
+            <Button
+              onClick={() => setShowCreateFolder(!showCreateFolder)}
+              variant="outline"
+              className="gap-2"
+            >
+              <FiFolderPlus className="h-4 w-4" />
               New Folder
             </Button>
           </div>
-        </div>
-      </Card>
 
+          <input
+            ref={fileInputRef}
+            type="file"
+            onChange={handleFileChange}
+            disabled={uploadFileMutation.isPending}
+            hidden
+            accept="*"
+          />
+          <input
+            ref={folderInputRef}
+            type="file"
+            onChange={handleFolderChange}
+            disabled={uploadFolderMutation.isPending}
+            hidden
+            {...({ webkitdirectory: '', directory: '' } as any)}
+          />
+        </div>
+      </div>
+
+      {/* Upload Progress */}
+      {Object.keys(uploadProgress).length > 0 && (
+        <Card className="space-y-3 border-indigo-600/30 bg-indigo-950/20 p-4">
+          <h4 className="font-semibold text-white">Uploading...</h4>
+          {Object.entries(uploadProgress).map(([key, progress]) => (
+            <div key={key} className="space-y-1">
+              <div className="flex justify-between text-xs text-zinc-400">
+                <span>File upload</span>
+                <span>{progress}%</span>
+              </div>
+              <div className="h-2 overflow-hidden rounded-full bg-zinc-800">
+                <div
+                  className="h-full bg-gradient-to-r from-indigo-500 to-purple-500 transition-all"
+                  style={{ width: `${progress}%` }}
+                />
+              </div>
+            </div>
+          ))}
+        </Card>
+      )}
+
+      {/* Create Folder Form */}
       {showCreateFolder && (
-        <Card className="p-4">
+        <Card className="space-y-3 border-zinc-700 bg-zinc-800/50 p-4">
+          <h4 className="font-semibold text-white">Create New Folder</h4>
           <div className="flex gap-2">
             <Input
-              placeholder="Folder name"
+              placeholder="Folder name..."
               value={newFolderName}
               onChange={(e) => setNewFolderName(e.target.value)}
               onKeyDown={(e) => {
@@ -234,15 +458,18 @@ export default function FilesPage() {
                   handleCreateFolder();
                 }
               }}
+              autoFocus
+              className="flex-1"
             />
             <Button
               onClick={handleCreateFolder}
               disabled={createFolderMutation.isPending || !newFolderName.trim()}
+              className="bg-green-600 hover:bg-green-700"
             >
               Create
             </Button>
             <Button
-              variant="ghost"
+              variant="outline"
               onClick={() => {
                 setShowCreateFolder(false);
                 setNewFolderName("");
@@ -254,187 +481,258 @@ export default function FilesPage() {
         </Card>
       )}
 
+      {/* Search Bar & Info */}
+      <Card className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+        <div>
+          <h2 className="text-lg font-semibold text-white">Your Files</h2>
+          <p className="text-sm text-zinc-500">
+            {files.length} item{files.length !== 1 ? "s" : ""}
+          </p>
+        </div>
+        <Input
+          type="search"
+          placeholder="Search files..."
+          value={search}
+          onChange={(event) => {
+            setSearch(event.target.value);
+            setCurrentPage(1);
+          }}
+          className="w-full md:w-64"
+        />
+      </Card>
+
+      {/* Breadcrumb Navigation */}
       {currentFolderId && (
-        <Card className="p-4">
-          <div className="flex items-center gap-2">
-            <Button
-              variant="ghost"
-              onClick={() => setCurrentFolderId(null)}
-              className="text-xs"
-            >
-              ← Back to Root
-            </Button>
-          </div>
+        <Card className="flex items-center gap-2 p-3">
+          <Button
+            variant="ghost"
+            onClick={() => setCurrentFolderId(null)}
+            className="gap-2 text-sm"
+          >
+            <FiHome className="h-4 w-4" />
+            Root
+          </Button>
+          <FiChevronRight className="h-4 w-4 text-zinc-500" />
+          <span className="text-sm text-zinc-300">Current Folder</span>
         </Card>
       )}
 
-      <div className="overflow-hidden rounded-xl border border-zinc-800">
-        <table className="min-w-full divide-y divide-zinc-800">
-          <thead className="bg-zinc-900">
-            <tr>
-              <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-zinc-500">
-                Name
-              </th>
-              <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-zinc-500">
-                Type
-              </th>
-              <th className="hidden px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-zinc-500 md:table-cell">
-                Size
-              </th>
-              <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-zinc-500">
-                Status
-              </th>
-              <th className="hidden px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-zinc-500 md:table-cell">
-                Visibility
-              </th>
-              <th className="hidden px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-zinc-500 lg:table-cell">
-                Created
-              </th>
-              <th className="px-4 py-3 text-right text-xs font-semibold uppercase tracking-wider text-zinc-500">
-                Actions
-              </th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-zinc-900 bg-zinc-950">
-            {folders.map((folder) => (
-              <tr key={folder.id} className="hover:bg-zinc-900/50">
-                <td className="px-4 py-3 text-sm text-zinc-200">
-                  <button
-                    onClick={() => setCurrentFolderId(folder.id)}
-                    className="flex items-center gap-2 font-medium text-white hover:text-indigo-400"
-                  >
-                    <span>📁</span>
-                    {folder.name}
-                  </button>
-                </td>
-                <td className="px-4 py-3 text-sm text-zinc-400">Folder</td>
-                <td className="hidden px-4 py-3 text-sm text-zinc-400 md:table-cell">-</td>
-                <td className="px-4 py-3">
-                  <Badge
-                    variant={
-                      folder.status === "approved"
-                        ? "success"
-                        : folder.status === "pending"
-                        ? "warning"
-                        : "danger"
-                    }
-                  >
-                    {folder.status}
-                  </Badge>
-                </td>
-                <td className="hidden px-4 py-3 text-sm capitalize text-zinc-400 md:table-cell">
-                  {folder.visibility}
-                </td>
-                <td className="hidden px-4 py-3 text-sm text-zinc-400 lg:table-cell">
-                  {formatRelative(folder.createdAt)}
-                </td>
-                <td className="px-4 py-3 text-right space-x-2">
-                  <Button
-                    variant="ghost"
-                    className="text-xs text-red-400 hover:text-red-200"
-                    onClick={() => {
-                      if (confirm("Delete this folder?")) {
-                        deleteMutation.mutate(folder.id);
-                      }
-                    }}
-                    disabled={deleteMutation.isPending}
-                  >
-                    Delete
-                  </Button>
-                </td>
-              </tr>
-            ))}
-            {fileItems.map((file) => (
-              <tr key={file.id} className="hover:bg-zinc-900/50">
-                <td className="px-4 py-3 text-sm text-zinc-200">
-                  <p className="font-medium text-white">{file.name}</p>
-                  <p className="text-xs text-zinc-500">{file.path}</p>
-                </td>
-                <td className="px-4 py-3 text-sm text-zinc-400">
-                  {file.mimeType || "File"}
-                </td>
-                <td className="hidden px-4 py-3 text-sm text-zinc-400 md:table-cell">
-                  {formatFileSize(file.size)}
-                </td>
-                <td className="px-4 py-3">
-                  <Badge
-                    variant={
-                      file.status === "approved"
-                        ? "success"
-                        : file.status === "pending"
-                        ? "warning"
-                        : "danger"
-                    }
-                  >
-                    {file.status}
-                  </Badge>
-                </td>
-                <td className="hidden px-4 py-3 text-sm capitalize text-zinc-400 md:table-cell">
-                  {file.visibility}
-                </td>
-                <td className="hidden px-4 py-3 text-sm text-zinc-400 lg:table-cell">
-                  {formatRelative(file.createdAt)}
-                </td>
-                <td className="px-4 py-3 text-right space-x-2">
-                  <Button
-                    variant="ghost"
-                    className="text-xs text-zinc-400"
-                    onClick={() => setPreviewFile(file)}
-                  >
-                    Preview
-                  </Button>
-                  <Button
-                    variant="ghost"
-                    className="text-xs text-zinc-400"
-                    onClick={async () => {
-                      const result = await downloadMutation.mutateAsync(
-                        file.id
-                      );
-                      window.open(result.url, "_blank", "noopener,noreferrer");
-                    }}
-                  >
-                    Download
-                  </Button>
-                  <Button
-                    variant="ghost"
-                    className="text-xs text-red-400 hover:text-red-200"
-                    onClick={() => {
-                      if (confirm("Delete this file?")) {
-                        deleteMutation.mutate(file.id);
-                      }
-                    }}
-                    disabled={deleteMutation.isPending}
-                  >
-                    Delete
-                  </Button>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-        {filesQuery.isLoading && (
-          <div className="flex items-center justify-center py-12">
-            <LoadingSpinner size="lg" />
+      {/* Files Table */}
+      <div className="overflow-hidden rounded-2xl border border-zinc-800">
+        {filesQuery.isLoading ? (
+          <div className="flex items-center justify-center border-b border-zinc-800 bg-zinc-950 p-8">
+            <LoadingSpinner />
           </div>
-        )}
-        {files.length === 0 && !filesQuery.isLoading && (
-          <p className="px-4 py-6 text-center text-sm text-zinc-500">
-            No files or folders yet. Upload files or create a folder to get
-            started.
-          </p>
+        ) : files.length === 0 ? (
+          <div className="bg-zinc-950 p-8 text-center">
+            <p className="text-zinc-500">
+              No files yet. Upload files or create folders to get started.
+            </p>
+          </div>
+        ) : (
+          <table className="min-w-full divide-y divide-zinc-800">
+            <thead className="bg-zinc-900">
+              <tr>
+                <th className="px-4 py-4 text-left text-xs font-semibold uppercase tracking-wider text-zinc-400">
+                  Name
+                </th>
+                <th className="hidden px-4 py-4 text-left text-xs font-semibold uppercase tracking-wider text-zinc-400 sm:table-cell">
+                  Type
+                </th>
+                <th className="hidden px-4 py-4 text-left text-xs font-semibold uppercase tracking-wider text-zinc-400 md:table-cell">
+                  Size
+                </th>
+                <th className="hidden px-4 py-4 text-left text-xs font-semibold uppercase tracking-wider text-zinc-400 lg:table-cell">
+                  Status
+                </th>
+                <th className="hidden px-4 py-4 text-left text-xs font-semibold uppercase tracking-wider text-zinc-400 xl:table-cell">
+                  Created
+                </th>
+                <th className="px-4 py-4 text-right text-xs font-semibold uppercase tracking-wider text-zinc-400">
+                  Actions
+                </th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-zinc-900 bg-zinc-950">
+              {/* Folders */}
+              {folders.map((folder) => (
+                <tr
+                  key={folder.id}
+                  className="transition-colors hover:bg-zinc-900/50"
+                >
+                  <td className="px-4 py-4">
+                    <button
+                      onClick={() => setCurrentFolderId(folder.id)}
+                      className="flex items-center gap-3 font-medium text-indigo-400 hover:text-indigo-300"
+                    >
+                      <FiFolder className="h-5 w-5" />
+                      <span>{folder.name}</span>
+                    </button>
+                  </td>
+                  <td className="hidden px-4 py-4 text-sm text-zinc-400 sm:table-cell">
+                    Folder
+                  </td>
+                  <td className="hidden px-4 py-4 text-sm text-zinc-400 md:table-cell">
+                    -
+                  </td>
+                  <td className="hidden px-4 py-4 lg:table-cell">
+                    <Badge
+                      variant={
+                        folder.status === "approved"
+                          ? "success"
+                          : folder.status === "pending"
+                          ? "warning"
+                          : "danger"
+                      }
+                      className="text-xs"
+                    >
+                      {folder.status}
+                    </Badge>
+                  </td>
+                  <td className="hidden px-4 py-4 text-sm text-zinc-400 xl:table-cell">
+                    {formatRelative(folder.createdAt)}
+                  </td>
+                  <td className="px-4 py-4">
+                    <div className="flex items-center justify-end gap-2">
+                      <Button
+                        variant="ghost"
+                        className="text-red-400 hover:bg-red-950/30 hover:text-red-300"
+                        onClick={() => {
+                          if (confirm("Delete this folder?")) {
+                            deleteMutation.mutate(folder.id);
+                          }
+                        }}
+                        disabled={deleteMutation.isPending}
+                        title="Delete"
+                      >
+                        <FiTrash2 className="h-5 w-5" />
+                      </Button>
+                    </div>
+                  </td>
+                </tr>
+              ))}
+
+              {/* Files */}
+              {fileItems.map((file) => (
+                <tr
+                  key={file.id}
+                  className="transition-colors hover:bg-zinc-900/50"
+                >
+                  <td className="px-4 py-4">
+                    <div className="flex items-center gap-3">
+                      <span className="text-xl">
+                        {file.mimeType?.includes("image") ? (
+                          <FiImage className="h-5 w-5 text-blue-400" />
+                        ) : file.mimeType?.includes("video") ? (
+                          <FiVideo className="h-5 w-5 text-red-400" />
+                        ) : file.mimeType?.includes("audio") ? (
+                          <FiMusic className="h-5 w-5 text-purple-400" />
+                        ) : file.mimeType?.includes("pdf") ? (
+                          <FiFile className="h-5 w-5 text-orange-400" />
+                        ) : file.mimeType?.includes("text") ? (
+                          <FiFileText className="h-5 w-5 text-green-400" />
+                        ) : file.mimeType?.includes("zip") ? (
+                          <FiPackage className="h-5 w-5 text-yellow-400" />
+                        ) : (
+                          <FiFile className="h-5 w-5 text-zinc-400" />
+                        )}
+                      </span>
+                      <div className="min-w-0">
+                        <p className="truncate font-medium text-white">
+                          {file.name}
+                        </p>
+                        <p className="truncate text-xs text-zinc-500">
+                          {file.path}
+                        </p>
+                      </div>
+                    </div>
+                  </td>
+                  <td className="hidden px-4 py-4 text-sm text-zinc-400 sm:table-cell">
+                    {file.mimeType?.split("/")[1] || "file"}
+                  </td>
+                  <td className="hidden px-4 py-4 text-sm text-zinc-400 md:table-cell">
+                    {formatFileSize(file.size)}
+                  </td>
+                  <td className="hidden px-4 py-4 lg:table-cell">
+                    <Badge
+                      variant={
+                        file.status === "approved"
+                          ? "success"
+                          : file.status === "pending"
+                          ? "warning"
+                          : "danger"
+                      }
+                      className="text-xs"
+                    >
+                      {file.status}
+                    </Badge>
+                  </td>
+                  <td className="hidden px-4 py-4 text-sm text-zinc-400 xl:table-cell">
+                    {formatRelative(file.createdAt)}
+                  </td>
+                  <td className="px-4 py-4">
+                    <div className="flex items-center justify-end gap-2">
+                      <Button
+                        variant="ghost"
+                        className="text-blue-400 hover:bg-blue-950/30 hover:text-blue-300"
+                        onClick={() => setPreviewFile(file)}
+                        title="Preview"
+                      >
+                        <FiEye className="h-5 w-5" />
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        className="text-green-400 hover:bg-green-950/30 hover:text-green-300"
+                        onClick={async () => {
+                          const result = await downloadMutation.mutateAsync(
+                            file.id
+                          );
+                          window.open(
+                            result.url,
+                            "_blank",
+                            "noopener,noreferrer"
+                          );
+                        }}
+                        title="Download"
+                      >
+                        <FiDownload className="h-5 w-5" />
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        className="text-red-400 hover:bg-red-950/30 hover:text-red-300"
+                        onClick={() => {
+                          if (confirm("Delete this file?")) {
+                            deleteMutation.mutate(file.id);
+                          }
+                        }}
+                        disabled={deleteMutation.isPending}
+                        title="Delete"
+                      >
+                        <FiTrash2 className="h-5 w-5" />
+                      </Button>
+                    </div>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
         )}
       </div>
 
+      {/* Pagination */}
       {filesQuery.data && filesQuery.data.meta.total > limit && (
-        <Pagination
-          currentPage={currentPage}
-          totalPages={Math.ceil(filesQuery.data.meta.total / limit)}
-          onPageChange={setCurrentPage}
-          totalItems={filesQuery.data.meta.total}
-          itemsPerPage={limit}
-        />
+        <div className="flex justify-center">
+          <Pagination
+            currentPage={currentPage}
+            totalPages={Math.ceil(filesQuery.data.meta.total / limit)}
+            onPageChange={setCurrentPage}
+            totalItems={filesQuery.data.meta.total}
+            itemsPerPage={limit}
+          />
+        </div>
       )}
 
+      {/* File Preview Modal */}
       {previewFile && (
         <FilePreview
           file={previewFile}
@@ -444,3 +742,4 @@ export default function FilesPage() {
     </div>
   );
 }
+
