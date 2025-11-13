@@ -33,16 +33,16 @@ export class Invite extends BaseEntity {
   })
   status: InviteStatus;
 
-  @Column({ name: 'expires_at', type: 'datetime', nullable: true })
+  @Column({ name: 'expires_at', nullable: true })
   expiresAt?: Date | null;
 
-  @Column({ name: 'accepted_at', type: 'datetime', nullable: true })
+  @Column({ name: 'accepted_at', nullable: true })
   acceptedAt?: Date | null;
 
-  @Column({ name: 'max_uses', type: 'integer', nullable: true })
+  @Column({ name: 'max_uses', nullable: true })
   maxUses?: number | null;
 
-  @Column({ name: 'uses', type: 'integer', default: 0 })
+  @Column({ name: 'uses', default: 0 })
   uses: number;
 
   @Column({ name: 'metadata', type: 'text', nullable: true })

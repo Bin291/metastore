@@ -91,10 +91,10 @@ export class FileObject extends BaseEntity {
   @Column({ name: 'metadata', type: 'text', nullable: true })
   metadata?: Record<string, unknown> | null;
 
-  @Column({ name: 'approved_at', type: 'datetime', nullable: true })
+  @Column({ name: 'approved_at', nullable: true })
   approvedAt?: Date | null;
 
-  @Column({ name: 'rejected_at', type: 'datetime', nullable: true })
+  @Column({ name: 'rejected_at', nullable: true })
   rejectedAt?: Date | null;
 
   @Column({

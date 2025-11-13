@@ -41,7 +41,7 @@ export class User extends BaseEntity {
   @Column({ name: 'bucket_prefix', length: 255 })
   bucketPrefix: string;
 
-  @Column({ name: 'last_login_at', type: 'datetime', nullable: true })
+  @Column({ name: 'last_login_at', nullable: true })
   lastLoginAt?: Date | null;
 
   @Column({ name: 'profile_metadata', type: 'text', nullable: true })

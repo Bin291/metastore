@@ -46,13 +46,13 @@ export class ShareLink extends BaseEntity {
   @Column({ name: 'password_hash', type: 'text', nullable: true })
   passwordHash?: string | null;
 
-  @Column({ name: 'expires_at', type: 'datetime', nullable: true })
+  @Column({ name: 'expires_at', nullable: true })
   expiresAt?: Date | null;
 
-  @Column({ name: 'last_accessed_at', type: 'datetime', nullable: true })
+  @Column({ name: 'last_accessed_at', nullable: true })
   lastAccessedAt?: Date | null;
 
-  @Column({ name: 'access_count', type: 'integer', default: 0 })
+  @Column({ name: 'access_count', default: 0 })
   accessCount: number;
 
   @ManyToOne(() => User, (user) => user.shareLinks, {

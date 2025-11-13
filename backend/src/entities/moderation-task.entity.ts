@@ -34,7 +34,7 @@ export class ModerationTask extends BaseEntity {
   @Column({ type: 'text', nullable: true })
   details?: Record<string, unknown> | null;
 
-  @Column({ name: 'scored_at', type: 'datetime', nullable: true })
+  @Column({ name: 'scored_at', nullable: true })
   scoredAt?: Date | null;
 
   @Column({

@@ -27,7 +27,7 @@ export class Notification extends BaseEntity {
   @Column({ type: 'text', nullable: true })
   payload?: Record<string, unknown> | null;
 
-  @Column({ name: 'read_at', type: 'datetime', nullable: true })
+  @Column({ name: 'read_at', nullable: true })
   readAt?: Date | null;
 }
 
