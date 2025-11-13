@@ -74,22 +74,26 @@ export class FilesService {
       size: String(dto.size ?? 0),
       mimeType: dto.mimeType,
       checksum: dto.checksum,
-      status: FileStatus.PENDING,
-      bucketType: BucketType.PENDING,
+      status: dto.isFolder ? FileStatus.APPROVED : FileStatus.PENDING,
+      bucketType: dto.isFolder ? BucketType.PRIVATE : BucketType.PENDING,
       visibility: dto.visibility ?? FileVisibility.PRIVATE,
       ownerId: userId,
       parentId: dto.parentId ?? null,
       metadata: {},
+      approvedAt: dto.isFolder ? new Date() : null,
     };
 
     const file = this.fileRepository.create(filePayload);
 
     const saved = await this.fileRepository.save(file);
 
-    const moderationTask = this.moderationRepository.create({
-      fileId: saved.id,
-    } as DeepPartial<ModerationTask>);
-    await this.moderationRepository.save(moderationTask);
+    // Only create moderation task for files, not folders
+    if (!dto.isFolder) {
+      const moderationTask = this.moderationRepository.create({
+        fileId: saved.id,
+      } as DeepPartial<ModerationTask>);
+      await this.moderationRepository.save(moderationTask);
+    }
 
     await this.auditLogService.record({
       action: AuditAction.FILE_UPDATED,

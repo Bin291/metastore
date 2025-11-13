@@ -31,17 +31,21 @@ export class ModerationTask extends BaseEntity {
   @Column({ type: 'text', nullable: true })
   verdict?: string | null;
 
-  @Column({ type: 'text', nullable: true })
+  @Column({ type: 'text', nullable: true, transformer: {
+    to: (value: any) => value ? JSON.stringify(value) : null,
+    from: (value: string) => {
+      if (!value) return null;
+      try { return JSON.parse(value); } catch { return value; }
+    }
+  }})
   details?: Record<string, unknown> | null;
 
-  @Column({ name: 'scored_at', nullable: true })
+  @Column({ name: 'scored_at', type: 'datetime', nullable: true })
   scoredAt?: Date | null;
 
   @Column({
     name: 'score',
     type: 'decimal',
-    precision: 6,
-    scale: 2,
     nullable: true,
   })
   score?: string | null;

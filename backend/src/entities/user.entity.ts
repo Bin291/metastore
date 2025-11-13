@@ -41,10 +41,16 @@ export class User extends BaseEntity {
   @Column({ name: 'bucket_prefix', length: 255 })
   bucketPrefix: string;
 
-  @Column({ name: 'last_login_at', nullable: true })
+  @Column({ name: 'last_login_at', type: 'datetime', nullable: true })
   lastLoginAt?: Date | null;
 
-  @Column({ name: 'profile_metadata', type: 'text', nullable: true })
+  @Column({ name: 'profile_metadata', type: 'text', nullable: true, transformer: {
+    to: (value: any) => value ? JSON.stringify(value) : null,
+    from: (value: string) => {
+      if (!value) return null;
+      try { return JSON.parse(value); } catch { return value; }
+    }
+  }})
   profileMetadata?: Record<string, unknown> | null;
 
   @Column({ name: 'refresh_token_hash', type: 'varchar', nullable: true })

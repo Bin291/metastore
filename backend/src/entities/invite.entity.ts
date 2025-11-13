@@ -33,19 +33,25 @@ export class Invite extends BaseEntity {
   })
   status: InviteStatus;
 
-  @Column({ name: 'expires_at', nullable: true })
+  @Column({ name: 'expires_at', type: 'datetime', nullable: true })
   expiresAt?: Date | null;
 
-  @Column({ name: 'accepted_at', nullable: true })
+  @Column({ name: 'accepted_at', type: 'datetime', nullable: true })
   acceptedAt?: Date | null;
 
-  @Column({ name: 'max_uses', nullable: true })
+  @Column({ name: 'max_uses', type: 'integer', nullable: true })
   maxUses?: number | null;
 
-  @Column({ name: 'uses', default: 0 })
+  @Column({ name: 'uses', type: 'integer', default: 0 })
   uses: number;
 
-  @Column({ name: 'metadata', type: 'text', nullable: true })
+  @Column({ name: 'metadata', type: 'text', nullable: true, transformer: {
+    to: (value: any) => value ? JSON.stringify(value) : null,
+    from: (value: string) => {
+      if (!value) return null;
+      try { return JSON.parse(value); } catch { return value; }
+    }
+  }})
   metadata?: Record<string, unknown> | null;
 
   @ManyToOne(() => User, (user) => user.invitesCreated, {

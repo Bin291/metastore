@@ -131,34 +131,48 @@ export default function FilesPage() {
     const folderMap = new Map<string, string>(); // path -> folderId
     const sortedPaths = Array.from(folderPaths).sort();
 
+    // Extract the root folder name (main folder that contains everything)
+    const allFolderPaths = new Set<string>();
+
     for (const fullPath of sortedPaths) {
-      const parts = fullPath.split("/").slice(0, -1); // Remove file name
-      let currentPath = "";
+      const parts = fullPath.split("/");
+      // Add all folder paths to the set
+      for (let i = 1; i <= parts.length - 1; i++) {
+        allFolderPaths.add(parts.slice(0, i).join("/"));
+      }
+    }
+
+    const sortedFolderPaths = Array.from(allFolderPaths).sort((a, b) => {
+      // Sort by depth (fewer slashes first)
+      const depthA = (a.match(/\//g) || []).length;
+      const depthB = (b.match(/\//g) || []).length;
+      return depthA - depthB;
+    });
+
+    // Create folders in order from root to leaf
+    for (const folderPath of sortedFolderPaths) {
+      if (folderMap.has(folderPath)) continue;
+
+      const parts = folderPath.split("/");
+      const folderName = parts[parts.length - 1];
+
+      // Find parent folder ID
       let parentId: string | undefined = currentFolderId || undefined;
+      if (parts.length > 1) {
+        const parentPath = parts.slice(0, -1).join("/");
+        parentId = folderMap.get(parentPath) || currentFolderId || undefined;
+      }
 
-      for (const part of parts) {
-        if (!part) continue;
-        currentPath = currentPath ? `${currentPath}/${part}` : part;
-
-        // Check if we already created this folder
-        if (folderMap.has(currentPath)) {
-          parentId = folderMap.get(currentPath);
-          continue;
-        }
-
-        try {
-          const result = await filesService.registerFile({
-            name: part,
-            path: currentPath,
-            isFolder: true,
-            parentId: parentId,
-          });
-          folderMap.set(currentPath, result.id);
-          parentId = result.id;
-        } catch (error) {
-          // Folder might already exist, try to find it
-          console.error(`Failed to create folder ${currentPath}:`, error);
-        }
+      try {
+        const result = await filesService.registerFile({
+          name: folderName,
+          path: folderPath,
+          isFolder: true,
+          parentId: parentId,
+        });
+        folderMap.set(folderPath, result.id);
+      } catch (error) {
+        console.error(`Failed to create folder ${folderPath}:`, error);
       }
     }
 
@@ -171,23 +185,27 @@ export default function FilesPage() {
     folderMap: Map<string, string>
   ): string | undefined => {
     const parts = filePath.split("/");
-    // Remove the file name to get folder path
-    const folderPath = parts.slice(0, -1).join("/");
 
-    if (!folderPath) {
+    // If file is in root folder
+    if (parts.length === 1) {
       return currentFolderId || undefined;
     }
+
+    // Remove the file name to get folder path
+    const folderPath = parts.slice(0, -1).join("/");
 
     return folderMap.get(folderPath) || currentFolderId || undefined;
   };
 
   const uploadFolderMutation = useMutation({
     mutationFn: async (files: FileList) => {
-      // First pass: Collect all unique folder paths
+      // First pass: Collect all unique file paths with folder structure
       const pathsSet = new Set<string>();
       Array.from(files).forEach((file) => {
-        const path = (file as any).webkitRelativePath || file.name;
-        pathsSet.add(path);
+        const relativePath = (file as any).webkitRelativePath;
+        if (relativePath) {
+          pathsSet.add(relativePath);
+        }
       });
 
       // Create folders first and get folder IDs
@@ -199,7 +217,9 @@ export default function FilesPage() {
         setUploadProgress((prev) => ({ ...prev, [fileId]: 0 }));
 
         try {
-          const path = (file as any).webkitRelativePath || file.name;
+          const relativePath = (file as any).webkitRelativePath;
+          const path = relativePath || file.name;
+
           // determine the correct parent id for this file based on created folders
           const fileParentId = findFileParentId(path, folderMap);
           const presigned = await filesService.requestUploadUrl({

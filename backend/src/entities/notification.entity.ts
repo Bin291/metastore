@@ -24,10 +24,16 @@ export class Notification extends BaseEntity {
   @Column({ type: 'varchar', length: 128 })
   type: string;
 
-  @Column({ type: 'text', nullable: true })
+  @Column({ type: 'text', nullable: true, transformer: {
+    to: (value: any) => value ? JSON.stringify(value) : null,
+    from: (value: string) => {
+      if (!value) return null;
+      try { return JSON.parse(value); } catch { return value; }
+    }
+  }})
   payload?: Record<string, unknown> | null;
 
-  @Column({ name: 'read_at', nullable: true })
+  @Column({ name: 'read_at', type: 'datetime', nullable: true })
   readAt?: Date | null;
 }
 
