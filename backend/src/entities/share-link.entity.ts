@@ -43,7 +43,7 @@ export class ShareLink extends BaseEntity {
   @Column({ type: 'boolean', default: true })
   active: boolean;
 
-  @Column({ name: 'password_hash', nullable: true })
+  @Column({ name: 'password_hash', type: 'varchar', nullable: true })
   passwordHash?: string | null;
 
   @Column({ name: 'expires_at', type: 'timestamptz', nullable: true })

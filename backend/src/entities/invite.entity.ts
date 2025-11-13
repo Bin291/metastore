@@ -15,10 +15,10 @@ import { User } from './user.entity';
 @Unique(['token'])
 @Index('idx_invites_status', ['status'])
 export class Invite extends BaseEntity {
-  @Column({ length: 128 })
+  @Column({ type: 'varchar', length: 128 })
   token: string;
 
-  @Column({ length: 255 })
+  @Column({ type: 'varchar', length: 255 })
   email: string;
 
   @Column({

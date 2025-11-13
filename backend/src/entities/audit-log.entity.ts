@@ -13,7 +13,7 @@ import { User } from './user.entity';
 @Index('idx_audit_logs_action', ['action'])
 @Index('idx_audit_logs_created_at', ['createdAt'])
 export class AuditLog extends BaseEntity {
-  @Column({ length: 128 })
+  @Column({ type: 'varchar', length: 128 })
   action: string;
 
   @Column({
@@ -33,13 +33,13 @@ export class AuditLog extends BaseEntity {
   @Column({ name: 'user_id', nullable: true })
   userId?: string | null;
 
-  @Column({ name: 'resource_id', nullable: true })
+  @Column({ name: 'resource_id', type: 'varchar', nullable: true })
   resourceId?: string | null;
 
-  @Column({ name: 'resource_type', nullable: true })
+  @Column({ name: 'resource_type', type: 'varchar', nullable: true })
   resourceType?: string | null;
 
-  @Column({ name: 'ip_address', length: 48, nullable: true })
+  @Column({ name: 'ip_address', type: 'varchar', length: 48, nullable: true })
   ipAddress?: string | null;
 
   @Column({ name: 'metadata', type: 'simple-json', nullable: true })

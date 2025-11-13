@@ -21,7 +21,7 @@ export class Notification extends BaseEntity {
   @Column({ name: 'user_id' })
   userId: string;
 
-  @Column({ length: 128 })
+  @Column({ type: 'varchar', length: 128 })
   type: string;
 
   @Column({ type: 'simple-json', nullable: true })

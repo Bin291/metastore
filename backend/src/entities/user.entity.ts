@@ -20,7 +20,7 @@ export class User extends BaseEntity {
   @Column({ length: 64 })
   username: string;
 
-  @Column({ name: 'password_hash' })
+  @Column({ name: 'password_hash', type: 'varchar' })
   passwordHash: string;
 
   @Column({
@@ -35,7 +35,7 @@ export class User extends BaseEntity {
   })
   status: UserStatus;
 
-  @Column({ name: 'email', length: 255, nullable: true, unique: true })
+  @Column({ name: 'email', type: 'varchar', length: 255, nullable: true, unique: true })
   email?: string | null;
 
   @Column({ name: 'bucket_prefix', length: 255 })
@@ -47,7 +47,7 @@ export class User extends BaseEntity {
   @Column({ name: 'profile_metadata', type: 'simple-json', nullable: true })
   profileMetadata?: Record<string, unknown> | null;
 
-  @Column({ name: 'refresh_token_hash', nullable: true })
+  @Column({ name: 'refresh_token_hash', type: 'varchar', nullable: true })
   refreshTokenHash?: string | null;
 
   @OneToMany(() => Invite, (invite) => invite.createdBy, {
