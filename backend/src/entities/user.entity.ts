@@ -41,10 +41,10 @@ export class User extends BaseEntity {
   @Column({ name: 'bucket_prefix', length: 255 })
   bucketPrefix: string;
 
-  @Column({ name: 'last_login_at', type: 'timestamptz', nullable: true })
+  @Column({ name: 'last_login_at', type: 'datetime', nullable: true })
   lastLoginAt?: Date | null;
 
-  @Column({ name: 'profile_metadata', type: 'simple-json', nullable: true })
+  @Column({ name: 'profile_metadata', type: 'text', nullable: true })
   profileMetadata?: Record<string, unknown> | null;
 
   @Column({ name: 'refresh_token_hash', type: 'varchar', nullable: true })

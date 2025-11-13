@@ -32,19 +32,23 @@ export class UsersService {
   ) {}
 
   async ensureDefaultAdmin(): Promise<{ created: boolean; username: string }> {
-    const existingAdmin = await this.userRepository.findOne({
-      where: { role: UserRole.ADMIN },
-    });
-
-    if (existingAdmin) {
-      return { created: false, username: existingAdmin.username };
-    }
-
     const adminConfig = this.configService.get<{
       defaultUsername: string;
       defaultPassword: string;
       defaultEmail?: string;
     }>('admin');
+
+    // Check if admin user already exists by username or email
+    const existingAdmin = await this.userRepository.findOne({
+      where: [
+        { username: adminConfig!.defaultUsername },
+        ...(adminConfig?.defaultEmail ? [{ email: adminConfig.defaultEmail }] : []),
+      ],
+    });
+
+    if (existingAdmin) {
+      return { created: false, username: existingAdmin.username };
+    }
 
     const passwordHash = await argon2.hash(adminConfig!.defaultPassword);
 
@@ -53,7 +57,7 @@ export class UsersService {
       passwordHash,
       role: UserRole.ADMIN,
       status: UserStatus.ACTIVE,
-      email: adminConfig?.defaultEmail,
+      email: adminConfig?.defaultEmail ?? undefined,
       bucketPrefix: 'pending',
     });
 

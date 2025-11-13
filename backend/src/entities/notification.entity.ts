@@ -24,10 +24,10 @@ export class Notification extends BaseEntity {
   @Column({ type: 'varchar', length: 128 })
   type: string;
 
-  @Column({ type: 'simple-json', nullable: true })
+  @Column({ type: 'text', nullable: true })
   payload?: Record<string, unknown> | null;
 
-  @Column({ name: 'read_at', type: 'timestamptz', nullable: true })
+  @Column({ name: 'read_at', type: 'datetime', nullable: true })
   readAt?: Date | null;
 }
 

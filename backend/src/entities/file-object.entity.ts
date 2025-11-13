@@ -88,13 +88,13 @@ export class FileObject extends BaseEntity {
   @OneToMany(() => ModerationTask, (task) => task.file)
   moderationTasks: ModerationTask[];
 
-  @Column({ name: 'metadata', type: 'simple-json', nullable: true })
+  @Column({ name: 'metadata', type: 'text', nullable: true })
   metadata?: Record<string, unknown> | null;
 
-  @Column({ name: 'approved_at', type: 'timestamp', nullable: true })
+  @Column({ name: 'approved_at', type: 'datetime', nullable: true })
   approvedAt?: Date | null;
 
-  @Column({ name: 'rejected_at', type: 'timestamp', nullable: true })
+  @Column({ name: 'rejected_at', type: 'datetime', nullable: true })
   rejectedAt?: Date | null;
 
   @Column({

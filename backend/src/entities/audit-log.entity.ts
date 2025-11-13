@@ -42,7 +42,7 @@ export class AuditLog extends BaseEntity {
   @Column({ name: 'ip_address', type: 'varchar', length: 48, nullable: true })
   ipAddress?: string | null;
 
-  @Column({ name: 'metadata', type: 'simple-json', nullable: true })
+  @Column({ name: 'metadata', type: 'text', nullable: true })
   metadata?: Record<string, unknown> | null;
 }
 

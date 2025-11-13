@@ -31,10 +31,10 @@ export class ModerationTask extends BaseEntity {
   @Column({ type: 'text', nullable: true })
   verdict?: string | null;
 
-  @Column({ type: 'simple-json', nullable: true })
+  @Column({ type: 'text', nullable: true })
   details?: Record<string, unknown> | null;
 
-  @Column({ name: 'scored_at', type: 'timestamp', nullable: true })
+  @Column({ name: 'scored_at', type: 'datetime', nullable: true })
   scoredAt?: Date | null;
 
   @Column({

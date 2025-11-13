@@ -200,12 +200,14 @@ export default function FilesPage() {
 
         try {
           const path = (file as any).webkitRelativePath || file.name;
+          // determine the correct parent id for this file based on created folders
+          const fileParentId = findFileParentId(path, folderMap);
           const presigned = await filesService.requestUploadUrl({
             path,
             mimeType: file.type,
             size: file.size,
             isFolder: false,
-            parentId: currentFolderId || undefined,
+            parentId: fileParentId || currentFolderId || undefined,
           });
 
           if (!presigned) {
@@ -227,9 +229,6 @@ export default function FilesPage() {
           }
 
           setUploadProgress((prev) => ({ ...prev, [fileId]: 80 }));
-
-          // Find the correct parent folder for this file
-          const fileParentId = findFileParentId(path, folderMap);
 
           const result = await filesService.registerFile({
             name: file.name,

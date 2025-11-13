@@ -43,16 +43,16 @@ export class ShareLink extends BaseEntity {
   @Column({ type: 'boolean', default: true })
   active: boolean;
 
-  @Column({ name: 'password_hash', type: 'varchar', nullable: true })
+  @Column({ name: 'password_hash', type: 'text', nullable: true })
   passwordHash?: string | null;
 
-  @Column({ name: 'expires_at', type: 'timestamptz', nullable: true })
+  @Column({ name: 'expires_at', type: 'datetime', nullable: true })
   expiresAt?: Date | null;
 
-  @Column({ name: 'last_accessed_at', type: 'timestamptz', nullable: true })
+  @Column({ name: 'last_accessed_at', type: 'datetime', nullable: true })
   lastAccessedAt?: Date | null;
 
-  @Column({ name: 'access_count', type: 'int', default: 0 })
+  @Column({ name: 'access_count', type: 'integer', default: 0 })
   accessCount: number;
 
   @ManyToOne(() => User, (user) => user.shareLinks, {
@@ -65,7 +65,7 @@ export class ShareLink extends BaseEntity {
   @Column({ name: 'created_by_id', nullable: true })
   createdById?: string | null;
 
-  @Column({ name: 'metadata', type: 'simple-json', nullable: true })
+  @Column({ name: 'metadata', type: 'text', nullable: true })
   metadata?: Record<string, unknown> | null;
 }
 
