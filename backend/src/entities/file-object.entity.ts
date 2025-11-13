@@ -19,13 +19,13 @@ import { ModerationTask } from './moderation-task.entity';
 @Index('idx_files_status', ['status'])
 @Index('idx_files_visibility', ['visibility'])
 export class FileObject extends BaseEntity {
-  @Column({ length: 512 })
+  @Column({ type: 'varchar', length: 512 })
   name: string;
 
-  @Column({ length: 1024 })
+  @Column({ type: 'varchar', length: 1024 })
   path: string;
 
-  @Column({ name: 'storage_key', length: 1024 })
+  @Column({ name: 'storage_key', type: 'varchar', length: 1024 })
   storageKey: string;
 
   @Column({ name: 'is_folder', type: 'boolean', default: false })
@@ -34,30 +34,27 @@ export class FileObject extends BaseEntity {
   @Column({ type: 'bigint', default: 0 })
   size: string;
 
-  @Column({ name: 'mime_type', length: 255, nullable: true })
+  @Column({ name: 'mime_type', type: 'text', nullable: true })
   mimeType?: string | null;
 
-  @Column({ name: 'checksum', length: 255, nullable: true })
+  @Column({ name: 'checksum', type: 'text', nullable: true })
   checksum?: string | null;
 
   @Column({
-    type: 'enum',
-    enum: FileStatus,
+    type: 'text',
     default: FileStatus.PENDING,
   })
   status: FileStatus;
 
   @Column({
     name: 'bucket_type',
-    type: 'enum',
-    enum: BucketType,
+    type: 'text',
     default: BucketType.PENDING,
   })
   bucketType: BucketType;
 
   @Column({
-    type: 'enum',
-    enum: FileVisibility,
+    type: 'text',
     default: FileVisibility.PRIVATE,
   })
   visibility: FileVisibility;
@@ -94,15 +91,15 @@ export class FileObject extends BaseEntity {
   @Column({ name: 'metadata', type: 'simple-json', nullable: true })
   metadata?: Record<string, unknown> | null;
 
-  @Column({ name: 'approved_at', type: 'timestamptz', nullable: true })
+  @Column({ name: 'approved_at', type: 'timestamp', nullable: true })
   approvedAt?: Date | null;
 
-  @Column({ name: 'rejected_at', type: 'timestamptz', nullable: true })
+  @Column({ name: 'rejected_at', type: 'timestamp', nullable: true })
   rejectedAt?: Date | null;
 
   @Column({
     name: 'public_path',
-    length: 1024,
+    type: 'text',
     nullable: true,
     comment: 'Publicly accessible path if visibility is public',
   })

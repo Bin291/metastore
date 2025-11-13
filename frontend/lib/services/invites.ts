@@ -41,14 +41,13 @@ function toQueryString(params: Record<string, unknown>) {
 
 export const invitesService = {
   create: (payload: CreateInvitePayload) =>
-    api.post<Invite>('/invites', payload),
+    api.post<Invite, CreateInvitePayload>('/invites', payload),
   list: (params: ListInvitesParams) => {
-    const query = toQueryString(params);
+    const query = toQueryString(params as Record<string, unknown>);
     return api.get<PaginatedResponse<Invite>>(
       `/invites${query ? `?${query}` : ''}`,
     );
   },
   revoke: (inviteId: string) =>
-    api.patch<Invite>(`/invites/${inviteId}/revoke`, {}),
+    api.patch<Invite, void>(`/invites/${inviteId}/revoke`, undefined),
 };
-

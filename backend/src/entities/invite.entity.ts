@@ -22,15 +22,13 @@ export class Invite extends BaseEntity {
   email: string;
 
   @Column({
-    type: 'enum',
-    enum: UserRole,
+    type: 'text',
     default: UserRole.USER,
   })
   role: UserRole;
 
   @Column({
-    type: 'enum',
-    enum: InviteStatus,
+    type: 'text',
     default: InviteStatus.PENDING,
   })
   status: InviteStatus;
@@ -60,7 +58,7 @@ export class Invite extends BaseEntity {
   @Column({ name: 'created_by_id' })
   createdById: string;
 
-  @Column({ name: 'created_for_user_id', nullable: true })
+  @Column({ name: 'created_for_user_id', type: 'text', nullable: true })
   createdForUserId?: string | null;
 }
 

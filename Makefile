@@ -45,3 +45,72 @@ else
 	(cd backend && npm install && npm run start:dev &) \
 	(cd frontend && npm install && npm run dev)
 endif
+
+# Database commands
+db-up:
+	docker run -d --name metastore-postgres \
+		-e POSTGRES_PASSWORD=postgres \
+		-e POSTGRES_DB=metastore \
+		-p 5432:5432 \
+		postgres:16-alpine
+
+db-down:
+	-docker rm -f metastore-postgres
+
+db-logs:
+	docker logs -f metastore-postgres
+
+# Clean commands
+clean:
+	rm -rf backend/dist backend/node_modules/.cache frontend/.next frontend/node_modules/.cache
+
+clean-all: clean
+	rm -rf backend/node_modules frontend/node_modules backend/data/*.db
+
+# Test commands
+test-api:
+	./test-api.sh
+
+test-backend:
+	cd backend && npm test
+
+test-frontend:
+	cd frontend && npm test
+
+# Build commands
+build-backend:
+	cd backend && npm run build
+
+build-frontend:
+	cd frontend && npm run build
+
+build-all: build-backend build-frontend
+
+# Docker commands
+docker-build:
+	docker-compose build
+
+docker-up:
+	docker-compose up -d
+
+docker-down:
+	docker-compose down
+
+docker-logs:
+	docker-compose logs -f
+
+# Development helpers
+install-all:
+	cd backend && npm install
+	cd frontend && npm install
+
+setup: install-all db-up minio-up
+	@echo "✅ Setup complete! Run 'make start-all' to start development servers"
+
+# Health checks
+health-check:
+	@echo "Checking services..."
+	@curl -s http://localhost:3001/api/health > /dev/null && echo "✅ Backend: OK" || echo "❌ Backend: Not running"
+	@curl -s http://localhost:3000 > /dev/null && echo "✅ Frontend: OK" || echo "❌ Frontend: Not running"
+	@docker ps | grep -q postgres && echo "✅ Postgres: OK" || echo "❌ Postgres: Not running"
+	@docker ps | grep -q minio && echo "✅ MinIO: OK" || echo "❌ MinIO: Not running"

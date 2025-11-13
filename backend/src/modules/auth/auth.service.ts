@@ -4,7 +4,6 @@ import {
   UnauthorizedException,
 } from '@nestjs/common';
 import { JwtService, type JwtSignOptions } from '@nestjs/jwt';
-import type { StringValue } from 'ms';
 import * as argon2 from 'argon2';
 import { UsersService } from '../users/users.service';
 import { InvitesService } from '../invites/invites.service';
@@ -14,6 +13,7 @@ import { AuditLogService } from '../audit/audit-log.service';
 import { AuditAction } from '../../common/enums/audit-action.enum';
 import { AuditActorType } from '../../common/enums/audit-actor-type.enum';
 import { UserStatus } from '../../common/enums/user-status.enum';
+import type { StringValue } from 'ms';
 
 export interface AuthTokens {
   accessToken: string;
@@ -132,11 +132,11 @@ export class AuthService {
       this.configService.get<string>('auth.refreshTokenSecret') ??
       'change-me-refresh-secret';
     const refreshTokenTtl =
-      this.configService.get<string>('auth.refreshTokenTtl') ?? '7d';
+      (this.configService.get<string>('auth.refreshTokenTtl') ?? '7d') as StringValue;
 
     const refreshOptions: JwtSignOptions = {
       secret: refreshTokenSecret,
-      expiresIn: refreshTokenTtl as StringValue,
+      expiresIn: refreshTokenTtl,
     };
 
     const [accessToken, refreshToken] = await Promise.all([

@@ -22,6 +22,12 @@ export function AppShell({ children }: AppShellProps) {
   const { logoutMutation } = useAuthActions();
   useCurrentUser();
 
+  useEffect(() => {
+    if (!isLoadingUser && !user) {
+      router.replace("/login");
+    }
+  }, [isLoadingUser, router, user]);
+
   const navItems = useMemo(
     () =>
       [
@@ -32,6 +38,7 @@ export function AppShell({ children }: AppShellProps) {
           ? [
               { label: "Pending Review", href: "/admin/pending" },
               { label: "Invites", href: "/admin/invites" },
+              { label: "Users", href: "/admin/users" },
             ]
           : []),
       ] as const,
@@ -50,12 +57,6 @@ export function AppShell({ children }: AppShellProps) {
       </div>
     );
   }
-
-  useEffect(() => {
-    if (!isLoadingUser && !user) {
-      router.replace("/login");
-    }
-  }, [isLoadingUser, router, user]);
 
   if (!user) {
     return (

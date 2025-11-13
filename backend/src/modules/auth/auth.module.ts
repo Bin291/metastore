@@ -26,12 +26,12 @@ import { AuditLogModule } from '../audit/audit-log.module';
           configService.get<string>('auth.accessTokenSecret') ??
           'change-me-access-secret';
         const expiresIn =
-          configService.get<string>('auth.accessTokenTtl') ?? '15m';
+          (configService.get<string>('auth.accessTokenTtl') ?? '15m') as StringValue;
 
         return {
           secret,
           signOptions: {
-            expiresIn: expiresIn as StringValue,
+            expiresIn,
           },
         };
       },

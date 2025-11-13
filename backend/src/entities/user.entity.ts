@@ -24,15 +24,13 @@ export class User extends BaseEntity {
   passwordHash: string;
 
   @Column({
-    type: 'enum',
-    enum: UserRole,
+    type: 'text',
     default: UserRole.USER,
   })
   role: UserRole;
 
   @Column({
-    type: 'enum',
-    enum: UserStatus,
+    type: 'text',
     default: UserStatus.ACTIVE,
   })
   status: UserStatus;

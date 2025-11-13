@@ -23,19 +23,18 @@ export class ModerationTask extends BaseEntity {
   fileId: string;
 
   @Column({
-    type: 'enum',
-    enum: ModerationStatus,
+    type: 'text',
     default: ModerationStatus.PENDING,
   })
   status: ModerationStatus;
 
-  @Column({ length: 64, nullable: true })
+  @Column({ type: 'text', nullable: true })
   verdict?: string | null;
 
   @Column({ type: 'simple-json', nullable: true })
   details?: Record<string, unknown> | null;
 
-  @Column({ name: 'scored_at', type: 'timestamptz', nullable: true })
+  @Column({ name: 'scored_at', type: 'timestamp', nullable: true })
   scoredAt?: Date | null;
 
   @Column({

@@ -41,16 +41,21 @@ function toQueryString(params: Record<string, unknown>) {
 
 export const shareLinksService = {
   create: (payload: CreateShareLinkPayload) =>
-    api.post<ShareLink>('/share-links', payload),
+    api.post<ShareLink, CreateShareLinkPayload>('/share-links', payload),
   list: (params: ListShareLinksParams) => {
-    const query = toQueryString(params);
+    const query = toQueryString(params as Record<string, unknown>);
     return api.get<PaginatedResponse<ShareLink>>(
       `/share-links${query ? `?${query}` : ''}`,
     );
   },
   toggle: (linkId: string, payload: ToggleShareLinkPayload) =>
-    api.patch<ShareLink>(`/share-links/${linkId}/toggle`, payload),
+    api.patch<ShareLink, ToggleShareLinkPayload>(
+      `/share-links/${linkId}/toggle`,
+      payload,
+    ),
   access: (token: string, payload: AccessShareLinkPayload) =>
-    api.post<ShareLink>(`/share-links/token/${token}/access`, payload),
+    api.post<ShareLink, AccessShareLinkPayload>(
+      `/share-links/token/${token}/access`,
+      payload,
+    ),
 };
-

@@ -30,14 +30,12 @@ export class ShareLink extends BaseEntity {
 
   @Column({
     name: 'resource_type',
-    type: 'enum',
-    enum: ShareResourceType,
+    type: 'text',
   })
   resourceType: ShareResourceType;
 
   @Column({
-    type: 'enum',
-    enum: SharePermission,
+    type: 'text',
     default: SharePermission.VIEW,
   })
   permission: SharePermission;

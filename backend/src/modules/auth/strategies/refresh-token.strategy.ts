@@ -10,7 +10,7 @@ import { JwtPayload } from '../types/jwt-payload.interface';
 import type { Request } from 'express';
 
 type CookieAwareRequest = Request & {
-  cookies?: Record<string, string>
+  cookies?: Record<string, string>;
 };
 
 function extractRefreshToken(req: CookieAwareRequest, cookieName: string) {

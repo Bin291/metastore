@@ -13,6 +13,8 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { formatRelative } from "@/lib/time";
+import { Pagination } from "@/components/ui/pagination";
+import { useState } from "react";
 
 const formSchema = z.object({
   resourceId: z.string().min(1, "Please choose a file or folder"),
@@ -25,6 +27,8 @@ type FormValues = z.infer<typeof formSchema>;
 
 export default function ShareLinksPage() {
   const queryClient = useQueryClient();
+  const [currentPage, setCurrentPage] = useState(1);
+  const limit = 20;
 
   const filesQuery = useQuery({
     queryKey: ["files", { page: 1, limit: 50 }],
@@ -32,8 +36,8 @@ export default function ShareLinksPage() {
   });
 
   const shareLinksQuery = useQuery({
-    queryKey: ["share-links", { page: 1, limit: 50 }],
-    queryFn: () => shareLinksService.list({ page: 1, limit: 50 }),
+    queryKey: ["share-links", { page: currentPage, limit }],
+    queryFn: () => shareLinksService.list({ page: currentPage, limit }),
   });
 
   const form = useForm<FormValues>({
@@ -218,6 +222,16 @@ export default function ShareLinksPage() {
           )}
         </div>
       </Card>
+
+      {shareLinksQuery.data && shareLinksQuery.data.meta.total > limit && (
+        <Pagination
+          currentPage={currentPage}
+          totalPages={Math.ceil(shareLinksQuery.data.meta.total / limit)}
+          onPageChange={setCurrentPage}
+          totalItems={shareLinksQuery.data.meta.total}
+          itemsPerPage={limit}
+        />
+      )}
     </div>
   );
 }

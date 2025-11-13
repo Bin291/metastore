@@ -18,8 +18,7 @@ export class AuditLog extends BaseEntity {
 
   @Column({
     name: 'actor_type',
-    type: 'enum',
-    enum: AuditActorType,
+    type: 'text',
     default: AuditActorType.USER,
   })
   actorType: AuditActorType;
