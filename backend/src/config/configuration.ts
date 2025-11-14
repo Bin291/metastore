@@ -74,7 +74,7 @@ export const configuration = () => ({
   },
   admin: {
     defaultUsername: process.env.DEFAULT_ADMIN_USERNAME ?? 'admin',
-    defaultPassword: process.env.DEFAULT_ADMIN_PASSWORD ?? 'ChangeMe123!',
+    defaultPassword: process.env.DEFAULT_ADMIN_PASSWORD ?? 'admin123',
     defaultEmail: process.env.DEFAULT_ADMIN_EMAIL ?? undefined,
   },
 });

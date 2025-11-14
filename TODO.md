@@ -1,4 +1,62 @@
-# TODO - Folder Page API Integration
+# TODO - Metastore Project
+
+## 🚀 Hướng dẫn chạy Project (khi mất kết nối Docker Hub)
+
+### Điều kiện tiên quyết
+- Docker Desktop đã cài đặt và chạy
+- Đã có các images sau:
+  - `redis:7-alpine` (60.7MB)
+  - `minio/minio:latest` (241MB)
+
+### Cách chạy khi mất kết nối mạng
+
+**Bước 1-2: Khởi động MinIO + Redis**
+
+Cách cũ (thường chạy được):
+```powershell
+make minio-up
+```
+
+Cách mới (khi mất kết nối mạng, dùng PowerShell script):
+```powershell
+make minio-up-alt
+```
+
+**Bước 3: Khởi động Backend (Terminal 1)**
+```powershell
+make start-backend
+```
+
+**Bước 4: Khởi động Frontend (Terminal 2)**
+```powershell
+make start-frontend
+```
+
+### Thông tin kết nối
+| Service | URL | Ghi chú |
+|---------|-----|--------|
+| Frontend | http://localhost:3000 | Giao diện chính |
+| Backend API | http://localhost:3001/api | NestJS API |
+| MinIO API | http://localhost:9000 | Object Storage API |
+| MinIO Console | http://localhost:9001 | Quản lý storage (user: minioadmin / pass: minioadmin) |
+| Redis | localhost:6379 | Cache database |
+
+### Tài khoản mặc định
+- **Username:** admin
+- **Password:** admin123
+- **Email:** admin@metastore.local
+
+### Vấn đề & Giải pháp
+
+**Vấn đề:** `TLS handshake timeout` khi `docker-compose up -d`
+- **Nguyên nhân:** Không thể kết nối Docker Hub để tải PostgreSQL
+- **Giải pháp:** Dùng SQLite thay vì PostgreSQL, chạy MinIO + Redis bằng docker run
+
+**Vấn đề:** Makefile không hoạt động tốt trên Windows PowerShell
+- **Nguyên nhân:** Dấu gạch chéo và PowerShell environment variables xen vào
+- **Giải pháp:** Chạy docker run command trực tiếp thay vì dùng Makefile
+
+---
 
 ## ✅ Completed Tasks
 

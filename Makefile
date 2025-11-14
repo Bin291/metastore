@@ -1,4 +1,4 @@
-.PHONY: minio-up minio-down dev start-dev frontend-dev start-all
+.PHONY: minio-up minio-up-alt minio-down dev start-dev frontend-dev start-all start-infra start-backend start-frontend
 
 MINIO_CONTAINER=minio
 MINIO_ACCESS_KEY=minioadmin
@@ -28,6 +28,10 @@ minio-up:
 		-v $(MINIO_VOLUME_ABS):/data \
 		minio/minio server /data --console-address ":9001"
 
+# Alternative method - using PowerShell script (when network is down)
+minio-up-alt:
+	PowerShell -ExecutionPolicy Bypass -File start-infra.ps1
+
 minio-down:
 	- docker rm -f $(MINIO_CONTAINER)
 
@@ -35,6 +39,16 @@ start-dev-be: minio-down minio-up
 	cd backend && npm install && npm run start:dev
 
 start-dev-fe:
+	cd frontend && npm install && npm run dev
+
+# New targets for separate development
+start-infra:
+	PowerShell -ExecutionPolicy Bypass -File start-infra.ps1
+
+start-backend:
+	cd backend && npm run start:dev
+
+start-frontend:
 	cd frontend && npm install && npm run dev
 
 start-all: minio-down minio-up
