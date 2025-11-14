@@ -7,6 +7,7 @@ import { NotificationsGateway } from './notifications.gateway';
 export interface CreateNotificationInput {
   userId: string;
   type: string;
+  message?: string;
   payload?: Record<string, unknown>;
 }
 
@@ -23,6 +24,7 @@ export class NotificationsService {
     const notification = this.notificationRepository.create({
       userId: input.userId,
       type: input.type,
+      message: input.message,
       payload: input.payload,
     });
 
@@ -31,11 +33,20 @@ export class NotificationsService {
     this.notificationsGateway.emitToUser(input.userId, 'notification', {
       id: saved.id,
       type: saved.type,
+      message: saved.message,
       payload: saved.payload,
       createdAt: saved.createdAt,
     });
 
     return saved;
+  }
+
+  async getByUser(userId: string, limit = 20): Promise<Notification[]> {
+    return this.notificationRepository.find({
+      where: { userId },
+      order: { createdAt: 'DESC' },
+      take: limit,
+    });
   }
 
   async markAsRead(userId: string, notificationId: string): Promise<Notification> {

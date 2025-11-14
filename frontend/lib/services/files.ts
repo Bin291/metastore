@@ -62,21 +62,21 @@ function toQueryString(params: Record<string, unknown>) {
 
 export const filesService = {
   list: (params: ListFilesParams) => {
-    const queryString = toQueryString(params);
+    const queryString = toQueryString(params as Record<string, unknown>);
     return api.get<PaginatedResponse<FileItem>>(
       `/files${queryString ? `?${queryString}` : ''}`,
     );
   },
   requestUploadUrl: (payload: RequestUploadPayload) =>
-    api.post<PresignedUrlResponse | null>('/files/upload-url', payload),
+    api.post<PresignedUrlResponse | null, RequestUploadPayload>('/files/upload-url', payload),
   registerFile: (payload: RegisterFilePayload) =>
-    api.post<FileItem>('/files', payload),
+    api.post<FileItem, RegisterFilePayload>('/files', payload),
   updateFile: (fileId: string, payload: Partial<RegisterFilePayload>) =>
-    api.patch<FileItem>(`/files/${fileId}`, payload),
+    api.patch<FileItem, Partial<RegisterFilePayload>>(`/files/${fileId}`, payload),
   approveFile: (fileId: string, payload: ApproveFilePayload) =>
-    api.patch<FileItem>(`/files/${fileId}/approve`, payload),
+    api.patch<FileItem, ApproveFilePayload>(`/files/${fileId}/approve`, payload),
   rejectFile: (fileId: string, payload: RejectFilePayload) =>
-    api.patch<FileItem>(`/files/${fileId}/reject`, payload),
+    api.patch<FileItem, RejectFilePayload>(`/files/${fileId}/reject`, payload),
   deleteFile: (fileId: string) =>
     api.delete<{ success: boolean }>(`/files/${fileId}`),
   downloadUrl: (fileId: string) =>

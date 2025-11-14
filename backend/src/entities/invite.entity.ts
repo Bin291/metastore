@@ -66,5 +66,21 @@ export class Invite extends BaseEntity {
 
   @Column({ name: 'created_for_user_id', type: 'text', nullable: true })
   createdForUserId?: string | null;
+
+  // User registration information
+  @Column({ name: 'user_full_name', type: 'varchar', length: 255, nullable: true })
+  userFullName?: string | null;
+
+  @Column({ name: 'user_phone', type: 'varchar', length: 20, nullable: true })
+  userPhone?: string | null;
+
+  @Column({ name: 'invitation_response_date', type: 'datetime', nullable: true })
+  invitationResponseDate?: Date | null;
+
+  @Column({ name: 'invitation_response_status', type: 'text', nullable: true })
+  invitationResponseStatus?: 'pending' | 'approved' | 'rejected' | null;
+
+  @Column({ name: 'rejection_reason', type: 'text', nullable: true })
+  rejectionReason?: string | null;
 }
 

@@ -13,10 +13,10 @@ export interface AcceptInvitePayload {
 }
 
 export const authService = {
-  login: (payload: LoginPayload) => api.post<User>('/auth/login', payload),
-  logout: () => api.post<{ success: boolean }>('/auth/logout'),
+  login: (payload: LoginPayload) => api.post<User, LoginPayload>('/auth/login', payload),
+  logout: () => api.post<{ success: boolean }, void>('/auth/logout'),
   acceptInvite: (payload: AcceptInvitePayload) =>
-    api.post<User>('/auth/accept-invite', payload),
-  refresh: () => api.post<User>('/auth/refresh'),
+    api.post<User, AcceptInvitePayload>('/auth/accept-invite', payload),
+  refresh: () => api.post<User, void>('/auth/refresh'),
 };
 

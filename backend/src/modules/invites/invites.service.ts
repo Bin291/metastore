@@ -6,6 +6,7 @@ import {
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { randomUUID } from 'crypto';
+import * as argon2 from 'argon2';
 import { Invite } from '../../entities/invite.entity';
 import { InviteStatus } from '../../common/enums/invite-status.enum';
 import { UserRole } from '../../common/enums/user-role.enum';
@@ -14,11 +15,29 @@ import { AuditAction } from '../../common/enums/audit-action.enum';
 import { AuditActorType } from '../../common/enums/audit-actor-type.enum';
 
 export interface CreateInviteInput {
-  email: string;
+  email?: string;
   role: UserRole;
   expiresAt?: Date;
   maxUses?: number;
   createdById: string;
+}
+
+export interface AcceptInviteInput {
+  email: string;
+  userFullName: string;
+  userPhone: string;
+}
+
+export interface ApproveInviteInput {
+  inviteId: string;
+  userId: string;
+  password?: string;
+  username?: string;
+}
+
+export interface RejectInviteInput {
+  inviteId: string;
+  reason?: string;
 }
 
 export interface ListInvitesOptions {
@@ -37,7 +56,7 @@ export class InvitesService {
 
   async createInvite(input: CreateInviteInput): Promise<Invite> {
     const invite = this.inviteRepository.create({
-      email: input.email.toLowerCase(),
+      email: input.email?.toLowerCase() || '',
       role: input.role,
       expiresAt: input.expiresAt,
       maxUses: input.maxUses ?? 1,
@@ -148,6 +167,88 @@ export class InvitesService {
     });
   }
 
+  async acceptInvite(
+    token: string,
+    input: AcceptInviteInput,
+  ): Promise<Invite> {
+    const invite = await this.inviteRepository.findOne({
+      where: { token },
+    });
+
+    if (!invite) {
+      throw new NotFoundException('Invite not found');
+    }
+
+    if (invite.status !== InviteStatus.PENDING) {
+      throw new BadRequestException('Invite is not available');
+    }
+
+    if (invite.expiresAt && invite.expiresAt < new Date()) {
+      invite.status = InviteStatus.EXPIRED;
+      await this.inviteRepository.save(invite);
+      throw new BadRequestException('Invite has expired');
+    }
+
+    // Update with user's registration info
+    invite.userFullName = input.userFullName;
+    invite.userPhone = input.userPhone;
+    invite.invitationResponseDate = new Date();
+    invite.invitationResponseStatus = 'pending';
+    invite.email = input.email.toLowerCase();
+
+    const savedInvite = await this.inviteRepository.save(invite);
+
+    return savedInvite;
+  }
+
+  async approveInvite(input: ApproveInviteInput): Promise<Invite> {
+    const invite = await this.inviteRepository.findOne({
+      where: { id: input.inviteId },
+    });
+
+    if (!invite) {
+      throw new NotFoundException('Invite not found');
+    }
+
+    if (invite.invitationResponseStatus !== 'pending') {
+      throw new BadRequestException('Invite is not pending approval');
+    }
+
+    // Password hash will be done in controller to avoid circular dependency
+    invite.invitationResponseStatus = 'approved';
+    invite.status = InviteStatus.USED;
+    invite.createdForUserId = input.userId;
+    
+    // Store password hash in metadata temporarily for controller to process
+    if (input.password) {
+      invite.metadata = invite.metadata || {};
+      (invite.metadata as any).pendingPassword = input.password;
+      (invite.metadata as any).pendingUsername = input.username;
+    }
+
+    return this.inviteRepository.save(invite);
+  }
+
+  async rejectInvite(input: RejectInviteInput): Promise<Invite> {
+    const invite = await this.inviteRepository.findOne({
+      where: { id: input.inviteId },
+    });
+
+    if (!invite) {
+      throw new NotFoundException('Invite not found');
+    }
+
+    if (invite.invitationResponseStatus !== 'pending') {
+      throw new BadRequestException('Invite is not pending approval');
+    }
+
+    invite.invitationResponseStatus = 'rejected';
+    invite.rejectionReason = input.reason || null;
+    invite.status = InviteStatus.REVOKED;
+
+    return this.inviteRepository.save(invite);
+  }
+
   async revokeInvite(inviteId: string): Promise<Invite> {
     const invite = await this.inviteRepository.findOne({
       where: { id: inviteId },
@@ -158,6 +259,10 @@ export class InvitesService {
     }
 
     invite.status = InviteStatus.REVOKED;
+    return this.inviteRepository.save(invite);
+  }
+
+  async saveInvite(invite: Invite): Promise<Invite> {
     return this.inviteRepository.save(invite);
   }
 }

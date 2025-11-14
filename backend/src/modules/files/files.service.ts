@@ -119,10 +119,16 @@ export class FilesService {
 
     const qb = this.fileRepository.createQueryBuilder('file');
 
-    if (user.role !== UserRole.ADMIN) {
-      qb.andWhere('file.ownerId = :ownerId', { ownerId: user.id });
-    } else if (query.ownerId) {
+    // Default behavior: users only see their own files
+    // Only admins can filter by other users' files if explicitly specified
+    if (user.role === UserRole.ADMIN && query.ownerId) {
       qb.andWhere('file.ownerId = :ownerId', { ownerId: query.ownerId });
+    } else if (user.role === UserRole.USER) {
+      // Users can only see their own files
+      qb.andWhere('file.ownerId = :ownerId', { ownerId: user.id });
+    } else {
+      // Admin without filter: see only their own files by default
+      qb.andWhere('file.ownerId = :ownerId', { ownerId: user.id });
     }
 
     if (query.status) {
@@ -260,6 +266,7 @@ export class FilesService {
     await this.notificationsService.createAndDispatch({
       userId: file.ownerId,
       type: 'file.approved',
+      message: `Your file "${updated.name}" has been approved.`,
       payload: {
         fileId: updated.id,
         name: updated.name,
@@ -318,6 +325,7 @@ export class FilesService {
     await this.notificationsService.createAndDispatch({
       userId: file.ownerId,
       type: 'file.rejected',
+      message: `Your file "${updated.name}" has been rejected${dto.reason ? ': ' + dto.reason : ''}.`,
       payload: {
         fileId: updated.id,
         name: updated.name,
