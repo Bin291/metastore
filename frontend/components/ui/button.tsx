@@ -14,18 +14,26 @@ const variants = {
   destructive: "bg-red-500 text-white hover:bg-red-400",
 };
 
+const sizes = {
+  default: "h-10 py-2 px-4",
+  sm: "h-8 px-3 text-xs",
+  lg: "h-12 px-6",
+};
+
 type Variant = keyof typeof variants;
+type Size = keyof typeof sizes;
 
 export interface ButtonProps
   extends React.ButtonHTMLAttributes<HTMLButtonElement> {
   variant?: Variant;
+  size?: Size;
 }
 
 export const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
-  ({ className, variant = "default", ...props }, ref) => (
+  ({ className, variant = "default", size = "default", ...props }, ref) => (
     <button
       ref={ref}
-      className={cn(baseStyles, variants[variant], className)}
+      className={cn(baseStyles, variants[variant], sizes[size], className)}
       {...props}
     />
   )

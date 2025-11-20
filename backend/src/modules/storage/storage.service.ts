@@ -12,7 +12,9 @@ import {
   Injectable,
   Logger,
   OnModuleInit,
+  NotFoundException,
 } from '@nestjs/common';
+import { Readable } from 'stream';
 import { ConfigService } from '@nestjs/config';
 import { BucketType } from '../../common/enums/bucket-type.enum';
 
@@ -205,6 +207,61 @@ export class StorageService implements OnModuleInit {
       destinationKey,
     );
     await this.deleteObject(sourceBucket, sourceKey);
+  }
+
+  async downloadFile(params: {
+    bucketType: BucketType;
+    key: string;
+  }): Promise<{ stream: Readable; contentType?: string; contentLength?: number }> {
+    const bucket = this.getBucketName(params.bucketType);
+    
+    try {
+      const command = new GetObjectCommand({
+        Bucket: bucket,
+        Key: params.key,
+      });
+
+      const response = await this.s3Client.send(command);
+
+      if (!response.Body) {
+        throw new NotFoundException('File not found');
+      }
+
+      return {
+        stream: response.Body as Readable,
+        contentType: response.ContentType,
+        contentLength: response.ContentLength,
+      };
+    } catch (error) {
+      this.logger.error(`Failed to download file: ${(error as Error).message}`);
+      throw new NotFoundException('File not found');
+    }
+  }
+
+  /**
+   * Upload file directly to storage
+   */
+  async uploadFile(params: {
+    bucketType: BucketType;
+    key: string;
+    content: Buffer | Readable;
+    contentType?: string;
+  }): Promise<void> {
+    const bucket = this.getBucketName(params.bucketType);
+
+    try {
+      await this.s3Client.send(
+        new PutObjectCommand({
+          Bucket: bucket,
+          Key: params.key,
+          Body: params.content,
+          ContentType: params.contentType,
+        }),
+      );
+    } catch (error) {
+      this.logger.error(`Failed to upload file: ${(error as Error).message}`);
+      throw error;
+    }
   }
 }
 

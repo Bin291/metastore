@@ -8,6 +8,7 @@ export enum AuditAction {
   FILE_APPROVED = 'file_approved',
   FILE_REJECTED = 'file_rejected',
   FILE_DELETED = 'file_deleted',
+  FILE_DOWNLOADED = 'file_downloaded',
   SHARE_LINK_CREATED = 'share_link_created',
   SHARE_LINK_TOGGLED = 'share_link_toggled',
 }

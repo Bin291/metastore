@@ -3,10 +3,12 @@ import {
   Controller,
   Delete,
   Get,
+  Header,
   Param,
   Patch,
   Post,
   Query,
+  StreamableFile,
   UseGuards,
 } from '@nestjs/common';
 import { plainToInstance } from 'class-transformer';
@@ -32,20 +34,20 @@ export class FilesController {
   @Post('upload-url')
   @Roles(UserRole.ADMIN, UserRole.USER)
   async requestUploadUrl(
-    @CurrentUser('id') userId: string,
+    @CurrentUser() user: { id: string; role: UserRole },
     @Body() dto: RequestUploadDto,
   ) {
-    const presigned = await this.filesService.requestUpload(userId, dto);
+    const presigned = await this.filesService.requestUpload(user.id, dto, user.role);
     return presigned;
   }
 
   @Post()
   @Roles(UserRole.ADMIN, UserRole.USER)
   async registerFile(
-    @CurrentUser('id') userId: string,
+    @CurrentUser() user: { id: string; role: UserRole },
     @Body() dto: RegisterFileDto,
   ) {
-    const file = await this.filesService.registerFile(userId, dto);
+    const file = await this.filesService.registerFile(user.id, dto, user.role);
     return this.toResponse(file);
   }
 
@@ -117,6 +119,37 @@ export class FilesController {
   ) {
     const url = await this.filesService.getDownloadUrl(fileId, user);
     return url;
+  }
+
+  @Get(':id/download')
+  @Roles(UserRole.ADMIN, UserRole.USER)
+  async downloadFile(
+    @Param('id') fileId: string,
+    @CurrentUser() user: { id: string; role: UserRole },
+  ): Promise<StreamableFile> {
+    const { file, stream, contentType } = await this.filesService.downloadFile(fileId, user);
+    
+    return new StreamableFile(stream, {
+      type: contentType,
+      disposition: `attachment; filename="${encodeURIComponent(file.name)}"`,
+    });
+  }
+
+  @Get(':id/hls/*path')
+  @Roles(UserRole.ADMIN, UserRole.USER)
+  @Header('Access-Control-Allow-Origin', '*')
+  @Header('Access-Control-Allow-Methods', 'GET, OPTIONS')
+  @Header('Access-Control-Allow-Headers', 'Content-Type')
+  async streamHLS(
+    @Param('id') fileId: string,
+    @Param('path') hlsPath: string,
+    @CurrentUser() user: { id: string; role: UserRole },
+  ): Promise<StreamableFile> {
+    const { stream, contentType } = await this.filesService.streamHLS(fileId, hlsPath, user);
+    
+    return new StreamableFile(stream, {
+      type: contentType,
+    });
   }
 
   private toResponse(file: any) {

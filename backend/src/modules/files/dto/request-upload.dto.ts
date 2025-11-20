@@ -1,11 +1,13 @@
 import {
   IsBoolean,
+  IsEnum,
   IsInt,
   IsOptional,
   IsString,
   MaxLength,
   Min,
 } from 'class-validator';
+import { FileVisibility } from '../../../common/enums/file-visibility.enum';
 
 export class RequestUploadDto {
   @IsString()
@@ -32,5 +34,9 @@ export class RequestUploadDto {
   @IsOptional()
   @IsString()
   parentId?: string;
+
+  @IsOptional()
+  @IsEnum(FileVisibility)
+  visibility?: FileVisibility;
 }
 

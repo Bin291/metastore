@@ -6,6 +6,7 @@ import { FilesController } from './files.controller';
 import { StorageModule } from '../storage/storage.module';
 import { AuditLogModule } from '../audit/audit-log.module';
 import { NotificationsModule } from '../notifications/notifications.module';
+import { MediaModule } from '../media/media.module';
 
 @Module({
   imports: [
@@ -13,6 +14,7 @@ import { NotificationsModule } from '../notifications/notifications.module';
     StorageModule,
     AuditLogModule,
     NotificationsModule,
+    MediaModule,
   ],
   providers: [FilesService],
   controllers: [FilesController],

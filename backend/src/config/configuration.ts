@@ -53,9 +53,9 @@ export const configuration = () => ({
     },
     presign: {
       uploadExpiresIn:
-        parseInt(process.env.STORAGE_UPLOAD_EXPIRES_IN ?? '900', 10) || 900,
+        parseInt(process.env.STORAGE_UPLOAD_EXPIRES_IN ?? '7200', 10) || 7200, // 2 hours for large files
       downloadExpiresIn:
-        parseInt(process.env.STORAGE_DOWNLOAD_EXPIRES_IN ?? '600', 10) || 600,
+        parseInt(process.env.STORAGE_DOWNLOAD_EXPIRES_IN ?? '3600', 10) || 3600, // 1 hour
     },
   },
   redis: {

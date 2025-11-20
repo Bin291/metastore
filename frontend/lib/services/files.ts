@@ -18,6 +18,7 @@ export interface RequestUploadPayload {
   isFolder: boolean;
   checksum?: string;
   parentId?: string;
+  visibility?: FileVisibility;
 }
 
 export interface RegisterFilePayload {

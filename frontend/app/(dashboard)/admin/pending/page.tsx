@@ -44,7 +44,7 @@ export default function PendingApprovalsPage() {
   const files: FileItem[] = pendingQuery.data?.data ?? [];
 
   return (
-    <div className="space-y-6">
+    <div className="max-w-7xl mx-auto space-y-6 px-4">
       <Card className="p-6">
         <h2 className="text-lg font-semibold text-white">Pending Approvals</h2>
         <p className="text-sm text-zinc-500">
