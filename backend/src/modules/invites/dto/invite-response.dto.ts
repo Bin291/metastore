@@ -29,5 +29,29 @@ export class InviteResponseDto {
 
   @Expose()
   createdAt: Date;
+
+  // User registration info
+  @Expose()
+  userFullName?: string | null;
+
+  @Expose()
+  userPhone?: string | null;
+
+  @Expose()
+  invitationResponseDate?: Date | null;
+
+  @Expose()
+  invitationResponseStatus?: 'pending' | 'approved' | 'rejected' | null;
+
+  @Expose()
+  rejectionReason?: string | null;
+
+  // Temporary credentials for approved invites
+  @Expose()
+  metadata?: {
+    temporaryUsername?: string;
+    temporaryPassword?: string;
+    [key: string]: any;
+  } | null;
 }
 

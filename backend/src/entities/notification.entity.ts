@@ -24,6 +24,9 @@ export class Notification extends BaseEntity {
   @Column({ type: 'varchar', length: 128 })
   type: string;
 
+  @Column({ type: 'text', nullable: true })
+  message?: string | null;
+
   @Column({ type: 'text', nullable: true, transformer: {
     to: (value: any) => value ? JSON.stringify(value) : null,
     from: (value: string) => {

@@ -1,4 +1,117 @@
-# TODO - Folder Page API Integration
+# TODO - Metastore Project
+
+## 🚀 Hướng dẫn chạy Project 
+
+### Điều kiện tiên quyết
+- Docker Desktop đã cài đặt và chạy
+- Đã có các images sau:
+  - `redis:7-alpine` (60.7MB)
+  - `minio/minio:latest` (241MB)
+
+### Lần đầu chạy project (Setup lần đầu)
+
+**Bước 1: Khởi động MinIO + Redis** (chỉ cần chạy 1 lần)
+
+Cách thường (khuyến nghị):
+```powershell
+make minio-up-alt
+```
+
+Hoặc cách cũ:
+```powershell
+make minio-up
+```
+
+⚠️ **Chú ý:** Sau khi chạy lệnh này, đợi 3-5 giây để MinIO khởi động hoàn tất.
+
+**Bước 2: Khởi động Backend (Terminal 1)**
+```powershell
+make start-backend
+```
+
+**Bước 3: Khởi động Frontend (Terminal 2)** 
+```powershell
+make start-frontend
+```
+
+### Lần 2 trở đi (khi đã tắt Docker/Projects)
+
+Nếu MinIO + Redis containers vẫn đang chạy:
+```powershell
+# Chỉ cần chạy Backend và Frontend
+make start-backend  # Terminal 1
+make start-frontend # Terminal 2
+```
+
+Nếu containers đã tắt, cần khởi động lại MinIO + Redis:
+```powershell
+# Bước 1: Khởi động MinIO + Redis
+make minio-up-alt
+
+# Bước 2-3: Khởi động Backend và Frontend
+make start-backend  # Terminal 1  
+make start-frontend # Terminal 2
+```
+
+### Thông tin kết nối
+| Service | URL | Ghi chú |
+|---------|-----|--------|
+| Frontend | http://localhost:3000 | Giao diện chính |
+| Backend API | http://localhost:3001/api | NestJS API |
+| MinIO API | http://localhost:9000 | Object Storage API |
+| MinIO Console | http://localhost:9001 | Quản lý storage (user: minioadmin / pass: minioadmin) |
+| Redis | localhost:6379 | Cache database |
+
+### Tài khoản mặc định
+- **Username:** admin
+- **Password:** admin123
+- **Email:** admin@metastore.local
+
+### Kiểm tra trạng thái services
+
+```powershell
+# Kiểm tra containers đang chạy
+docker ps
+
+# Kiểm tra logs nếu có lỗi
+docker logs minio
+docker logs redis
+
+# Health check tất cả services  
+make health-check
+
+# Kiểm tra trạng thái infrastructure (MinIO + Redis)
+make infra-status
+
+# Xem logs infrastructure
+make infra-logs
+
+# Restart infrastructure nếu cần
+make infra-restart
+```
+
+### Vấn đề & Giải pháp
+
+**Vấn đề:** `Failed to create bucket "metastore-xxx"` khi khởi động backend
+- **Nguyên nhân:** MinIO chưa sẵn sàng khi backend cố gắng tạo buckets
+- **Giải pháp:** 
+  1. Đợi 3-5 giây sau khi chạy `make minio-up-alt` 
+  2. Backend đã được cập nhật để tự động retry và thêm delay
+  3. Buckets sẽ được tạo tự động, lỗi log này không ảnh hưởng chức năng
+
+**Vấn đề:** `TLS handshake timeout` khi `docker-compose up -d`
+- **Nguyên nhân:** Không thể kết nối Docker Hub để tải PostgreSQL
+- **Giải pháp:** Dùng SQLite thay vì PostgreSQL, chạy MinIO + Redis bằng docker run
+
+**Vấn đề:** Makefile không hoạt động tốt trên Windows PowerShell
+- **Nguyên nhân:** Dấu gạch chéo và PowerShell environment variables xen vào
+- **Giải pháp:** Chạy docker run command trực tiếp thay vì dùng Makefile
+
+**Vấn đề:** Backend log hiển thị lỗi StorageService
+- **Nguyên nhân:** Log level quá chi tiết, hiển thị cả warning/error không quan trọng
+- **Giải pháp:** Các buckets sẽ được tạo tự động ở lần chạy tiếp theo, không cần lo lắng
+
+---
 
 ## ✅ Completed Tasks
 

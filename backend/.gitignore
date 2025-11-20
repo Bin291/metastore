@@ -3,6 +3,14 @@
 /node_modules
 /build
 
+# Database files
+/data
+/data/
+data/
+*.db
+*.sqlite
+*.sqlite3
+
 # Logs
 logs
 *.log

@@ -38,6 +38,12 @@ export class User extends BaseEntity {
   @Column({ name: 'email', type: 'varchar', length: 255, nullable: true, unique: true })
   email?: string | null;
 
+  @Column({ name: 'full_name', type: 'varchar', length: 255, nullable: true })
+  fullName?: string | null;
+
+  @Column({ name: 'phone', type: 'varchar', length: 20, nullable: true })
+  phone?: string | null;
+
   @Column({ name: 'bucket_prefix', length: 255 })
   bucketPrefix: string;
 

@@ -10,8 +10,9 @@ import {
 import { UserRole } from '../../../common/enums/user-role.enum';
 
 export class CreateInviteDto {
+  @IsOptional()
   @IsEmail()
-  email: string;
+  email?: string;
 
   @IsEnum(UserRole)
   role: UserRole;
@@ -23,7 +24,7 @@ export class CreateInviteDto {
   @IsOptional()
   @IsInt()
   @Min(1)
-  @Max(10)
+  @Max(100)
   maxUses?: number;
 }
 

@@ -12,6 +12,36 @@ export class ApiError extends Error {
 const defaultBaseUrl =
   process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001/api';
 
+let isRefreshing = false;
+let refreshPromise: Promise<void> | null = null;
+
+async function refreshToken(): Promise<void> {
+  if (isRefreshing && refreshPromise) {
+    return refreshPromise;
+  }
+
+  isRefreshing = true;
+  refreshPromise = apiFetch<{ success: boolean }>('/auth/refresh', {
+    method: 'POST',
+    credentials: 'include',
+  })
+    .then(() => {
+      isRefreshing = false;
+      refreshPromise = null;
+    })
+    .catch(() => {
+      isRefreshing = false;
+      refreshPromise = null;
+      // Refresh failed, redirect to login
+      if (typeof window !== 'undefined') {
+        window.location.href = '/login';
+      }
+      throw new ApiError(401, 'Session expired, please login again');
+    });
+
+  return refreshPromise;
+}
+
 export async function apiFetch<TResponse>(
   input: string,
   init?: RequestInit,
@@ -20,7 +50,7 @@ export async function apiFetch<TResponse>(
   const baseUrl = options?.baseUrl ?? defaultBaseUrl;
   const url = `${baseUrl}${input.startsWith('/') ? input : `/${input}`}`;
 
-  const response = await fetch(url, {
+  let response = await fetch(url, {
     credentials: 'include',
     ...init,
     headers: {
@@ -30,7 +60,26 @@ export async function apiFetch<TResponse>(
   });
 
   const parseJson = options?.parseJson ?? true;
-  const payload = parseJson ? await safeParseJson(response) : undefined;
+  let payload = parseJson ? await safeParseJson(response) : undefined;
+
+  // If 401 and not already a refresh request, try to refresh token
+  if (response.status === 401 && !input.includes('/auth/refresh')) {
+    try {
+      await refreshToken();
+      // Retry the original request
+      response = await fetch(url, {
+        credentials: 'include',
+        ...init,
+        headers: {
+          'Content-Type': 'application/json',
+          ...(init?.headers ?? {}),
+        },
+      });
+      payload = parseJson ? await safeParseJson(response) : undefined;
+    } catch (error) {
+      throw error;
+    }
+  }
 
   if (!response.ok) {
     const message =

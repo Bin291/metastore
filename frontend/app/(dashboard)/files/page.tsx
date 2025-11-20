@@ -52,7 +52,7 @@ export default function FilesPage() {
         page: currentPage,
         limit,
         search: search || undefined,
-        parentId: currentFolderId || null,
+        parentId: currentFolderId !== null ? currentFolderId : undefined,
       }),
   });
 
