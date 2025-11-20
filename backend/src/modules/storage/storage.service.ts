@@ -61,35 +61,40 @@ export class StorageService implements OnModuleInit {
   }
 
   async onModuleInit(): Promise<void> {
+    // Delay để đợi MinIO khởi động hoàn tất
+    await new Promise(resolve => setTimeout(resolve, 2000));
     await this.ensureBuckets();
   }
 
   private async ensureBuckets(): Promise<void> {
-    await Promise.all(
-      Object.values(BucketType).map(async (bucketType) => {
-        const bucketName = this.getBucketName(bucketType as BucketType);
+    this.logger.log('Checking and creating MinIO buckets...');
+    
+    for (const bucketType of Object.values(BucketType)) {
+      const bucketName = this.getBucketName(bucketType as BucketType);
+      try {
+        await this.s3Client.send(
+          new HeadBucketCommand({ Bucket: bucketName }),
+        );
+        this.logger.log(`✅ Bucket "${bucketName}" already exists.`);
+      } catch (error: unknown) {
+        this.logger.warn(
+          `Bucket "${bucketName}" not found, attempting to create.`,
+        );
         try {
           await this.s3Client.send(
-            new HeadBucketCommand({ Bucket: bucketName }),
+            new CreateBucketCommand({ Bucket: bucketName }),
           );
-        } catch (error: unknown) {
-          this.logger.warn(
-            `Bucket "${bucketName}" not found, attempting to create.`,
+          this.logger.log(`✅ Created bucket "${bucketName}".`);
+        } catch (creationError) {
+          this.logger.error(
+            `❌ Failed to create bucket "${bucketName}": ${(creationError as Error).message}`,
           );
-          try {
-            await this.s3Client.send(
-              new CreateBucketCommand({ Bucket: bucketName }),
-            );
-            this.logger.log(`Created bucket "${bucketName}".`);
-          } catch (creationError) {
-            this.logger.error(
-              `Failed to create bucket "${bucketName}".`,
-              (creationError as Error).message,
-            );
-          }
+          // Không throw error để không dừng ứng dụng
         }
-      }),
-    );
+      }
+    }
+    
+    this.logger.log('✅ MinIO bucket initialization completed.');
   }
 
   getBucketName(bucketType: BucketType): string {

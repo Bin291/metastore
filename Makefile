@@ -128,3 +128,21 @@ health-check:
 	@curl -s http://localhost:3000 > /dev/null && echo "✅ Frontend: OK" || echo "❌ Frontend: Not running"
 	@docker ps | grep -q postgres && echo "✅ Postgres: OK" || echo "❌ Postgres: Not running"
 	@docker ps | grep -q minio && echo "✅ MinIO: OK" || echo "❌ MinIO: Not running"
+	@docker ps | grep -q redis && echo "✅ Redis: OK" || echo "❌ Redis: Not running"
+
+# Infrastructure management
+infra-status:
+	@echo "=== Docker Containers Status ==="
+	@docker ps --format "table {{.Names}}\t{{.Status}}\t{{.Ports}}" --filter "name=minio" --filter "name=redis"
+	@echo ""
+
+infra-logs:
+	@echo "=== MinIO Logs ==="
+	@docker logs --tail 10 minio 2>/dev/null || echo "MinIO container not found"
+	@echo ""
+	@echo "=== Redis Logs ==="  
+	@docker logs --tail 10 redis 2>/dev/null || echo "Redis container not found"
+	@echo ""
+
+infra-restart: minio-down minio-up-alt
+	@echo "✅ Infrastructure restarted"
