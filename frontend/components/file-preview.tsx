@@ -42,12 +42,30 @@ export function FilePreview({ file, onClose }: FilePreviewProps) {
       return;
     }
 
-    // Auto-preview images, videos, audio
-    if (
-      file.mimeType.startsWith("image/") ||
-      file.mimeType.startsWith("video/") ||
-      file.mimeType.startsWith("audio/")
-    ) {
+    // For video/audio files, check if HLS is available
+    if (file.mimeType.startsWith("video/") || file.mimeType.startsWith("audio/")) {
+      const metadata = file.metadata as any;
+      const isProcessing = metadata?.processing === true;
+      const hlsMetadata = metadata?.hls;
+      
+      if (hlsMetadata?.processed && hlsMetadata?.masterPlaylist) {
+        // Use HLS streaming URL
+        const hlsUrl = `/api/files/${file.id}/hls/${hlsMetadata.masterPlaylist}`;
+        setPreviewUrl(hlsUrl);
+        return;
+      } else if (isProcessing || !hlsMetadata?.processed) {
+        // Still processing or not processed yet
+        setPreviewError("Media file is being processed. Please wait for HLS conversion to complete...");
+        return;
+      } else {
+        // Processing failed or error
+        setPreviewError("Media processing failed. Cannot preview this file.");
+        return;
+      }
+    }
+
+    // Auto-preview images
+    if (file.mimeType.startsWith("image/")) {
       downloadMutation.mutate();
       return;
     }
@@ -63,7 +81,7 @@ export function FilePreview({ file, onClose }: FilePreviewProps) {
     }
 
     setPreviewError("Preview not available for this file type");
-  }, [file.id, file.isFolder, file.mimeType]);
+  }, [file.id, file.isFolder, file.mimeType, file.metadata]);
 
   const canPreview = file.mimeType && (
     file.mimeType.startsWith("image/") ||

@@ -157,15 +157,7 @@ export class MediaProcessingService {
     audioBitrate: string,
   ): Promise<void> {
     return new Promise((resolve, reject) => {
-      let command = ffmpeg(inputPath)
-        .outputOptions([
-          '-codec: copy', // Try to copy codecs if compatible
-          '-start_number 0',
-          '-hls_time 6', // 6 second segments
-          '-hls_list_size 0', // Include all segments in playlist
-          '-hls_segment_filename', segmentPattern,
-          '-f hls',
-        ]);
+      let command = ffmpeg(inputPath);
 
       // Add video encoding if resolution specified
       if (resolution && videoBitrate) {
@@ -177,23 +169,51 @@ export class MediaProcessingService {
             '-preset fast',
             '-profile:v main',
             '-level 4.0',
-            '-crf 20',
-            '-sc_threshold 0', // Disable scene change detection
-            '-g 48', // GOP size
+            '-crf 23',
+            '-sc_threshold 0', // Disable scene change detection for consistent segments
+            '-g 48', // GOP size (keyframe every 2 seconds at 24fps)
             '-keyint_min 48',
           ]);
+      } else {
+        // Audio-only, no video
+        command = command.noVideo();
       }
 
       // Add audio encoding
       command = command
         .audioBitrate(audioBitrate)
         .audioCodec('aac')
-        .audioChannels(2);
+        .audioChannels(2)
+        .audioFrequency(44100);
+
+      // HLS-specific options
+      command = command.outputOptions([
+        '-start_number 0',
+        '-hls_time 6', // 6 second segments for fast streaming
+        '-hls_list_size 0', // Include all segments in playlist
+        '-hls_segment_type mpegts', // Use MPEG-TS container
+        '-hls_segment_filename', segmentPattern,
+        '-f hls',
+      ]);
 
       command
         .output(playlistPath)
-        .on('end', () => resolve())
-        .on('error', (err) => reject(err))
+        .on('start', (commandLine) => {
+          this.logger.debug(`FFmpeg command: ${commandLine}`);
+        })
+        .on('progress', (progress) => {
+          if (progress.percent) {
+            this.logger.debug(`Processing: ${Math.round(progress.percent)}%`);
+          }
+        })
+        .on('end', () => {
+          this.logger.log(`HLS transcoding completed: ${path.basename(playlistPath)}`);
+          resolve();
+        })
+        .on('error', (err) => {
+          this.logger.error(`FFmpeg error: ${err.message}`);
+          reject(err);
+        })
         .run();
     });
   }

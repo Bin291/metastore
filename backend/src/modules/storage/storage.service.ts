@@ -6,6 +6,10 @@ import {
   HeadBucketCommand,
   PutObjectCommand,
   S3Client,
+  CreateMultipartUploadCommand,
+  UploadPartCommand,
+  CompleteMultipartUploadCommand,
+  AbortMultipartUploadCommand,
 } from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import {
@@ -260,6 +264,115 @@ export class StorageService implements OnModuleInit {
       );
     } catch (error) {
       this.logger.error(`Failed to upload file: ${(error as Error).message}`);
+      throw error;
+    }
+  }
+
+  /**
+   * Initiate multipart upload
+   */
+  async initiateMultipartUpload(params: {
+    bucketType: BucketType;
+    key: string;
+    contentType?: string;
+  }): Promise<string> {
+    const bucket = this.getBucketName(params.bucketType);
+
+    try {
+      const command = new CreateMultipartUploadCommand({
+        Bucket: bucket,
+        Key: params.key,
+        ContentType: params.contentType,
+      });
+
+      const response = await this.s3Client.send(command);
+      
+      if (!response.UploadId) {
+        throw new Error('Failed to initiate multipart upload');
+      }
+
+      this.logger.log(`Initiated multipart upload: ${response.UploadId}`);
+      return response.UploadId;
+    } catch (error) {
+      this.logger.error(`Failed to initiate multipart upload: ${(error as Error).message}`);
+      throw error;
+    }
+  }
+
+  /**
+   * Get presigned URL for uploading a part
+   */
+  async getPresignedUploadPartUrl(params: {
+    bucketType: BucketType;
+    key: string;
+    uploadId: string;
+    partNumber: number;
+    expiresIn?: number;
+  }): Promise<string> {
+    const bucket = this.getBucketName(params.bucketType);
+
+    const command = new UploadPartCommand({
+      Bucket: bucket,
+      Key: params.key,
+      UploadId: params.uploadId,
+      PartNumber: params.partNumber,
+    });
+
+    const expiresIn = params.expiresIn ?? 3600; // 1 hour default
+
+    return getSignedUrl(this.s3Client, command, { expiresIn });
+  }
+
+  /**
+   * Complete multipart upload
+   */
+  async completeMultipartUpload(params: {
+    bucketType: BucketType;
+    key: string;
+    uploadId: string;
+    parts: { PartNumber: number; ETag: string }[];
+  }): Promise<void> {
+    const bucket = this.getBucketName(params.bucketType);
+
+    try {
+      const command = new CompleteMultipartUploadCommand({
+        Bucket: bucket,
+        Key: params.key,
+        UploadId: params.uploadId,
+        MultipartUpload: {
+          Parts: params.parts,
+        },
+      });
+
+      await this.s3Client.send(command);
+      this.logger.log(`Completed multipart upload: ${params.uploadId}`);
+    } catch (error) {
+      this.logger.error(`Failed to complete multipart upload: ${(error as Error).message}`);
+      throw error;
+    }
+  }
+
+  /**
+   * Abort multipart upload
+   */
+  async abortMultipartUpload(params: {
+    bucketType: BucketType;
+    key: string;
+    uploadId: string;
+  }): Promise<void> {
+    const bucket = this.getBucketName(params.bucketType);
+
+    try {
+      const command = new AbortMultipartUploadCommand({
+        Bucket: bucket,
+        Key: params.key,
+        UploadId: params.uploadId,
+      });
+
+      await this.s3Client.send(command);
+      this.logger.log(`Aborted multipart upload: ${params.uploadId}`);
+    } catch (error) {
+      this.logger.error(`Failed to abort multipart upload: ${(error as Error).message}`);
       throw error;
     }
   }

@@ -21,6 +21,7 @@ export function CustomVideoPlayer({ src, className = "" }: CustomVideoPlayerProp
   const [showQualityMenu, setShowQualityMenu] = useState(false);
   const [qualities, setQualities] = useState<{ level: number; height: number; label: string }[]>([]);
   const [currentQuality, setCurrentQuality] = useState<number>(-1); // -1 = Auto
+  const [segmentInfo, setSegmentInfo] = useState<{ loaded: number; total: number }>({ loaded: 0, total: 0 });
   const containerRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -31,14 +32,49 @@ export function CustomVideoPlayer({ src, className = "" }: CustomVideoPlayerProp
     const isHLS = src.includes('/hls/') || src.endsWith('.m3u8');
 
     if (isHLS && Hls.isSupported()) {
-      // Use HLS.js for adaptive streaming
+      // Use HLS.js for adaptive streaming with optimized settings
       const hls = new Hls({
         enableWorker: true,
         lowLatencyMode: false,
+        
+        // Buffer settings - tối ưu cho load nhanh
+        maxBufferLength: 10, // Chỉ buffer 10 giây (thay vì 30s)
+        maxMaxBufferLength: 20, // Max 20 giây
+        maxBufferSize: 20 * 1000 * 1000, // 20MB (giảm từ 60MB)
+        maxBufferHole: 0.3,
+        
+        // Fragment loading - load segment nhanh hơn
+        fragLoadingTimeOut: 20000, // 20s timeout
+        fragLoadingMaxRetry: 3,
+        fragLoadingRetryDelay: 1000,
+        
+        // Prefetch - load trước segment tiếp theo
+        startFragPrefetch: true,
+        
+        // Progressive rendering - play ngay khi có segment đầu
+        progressive: true,
+        
+        // Bandwidth detection
+        testBandwidth: true,
+        abrEwmaDefaultEstimate: 500000, // 500kbps default
+        
+        // Debug (bật để xem segment loading)
+        debug: false, // Set true để debug
       });
 
       hls.loadSource(src);
       hls.attachMedia(video);
+
+      // Log segment loading để debug
+      hls.on(Hls.Events.FRAG_LOADING, (event, data) => {
+        console.log(`Loading segment: ${data.frag.relurl}`);
+        setSegmentInfo(prev => ({ ...prev, total: Math.max(prev.total, Number(data.frag.sn) + 1) }));
+      });
+
+      hls.on(Hls.Events.FRAG_LOADED, (event, data) => {
+        console.log(`Loaded segment: ${data.frag.relurl} (${(data.frag.duration).toFixed(2)}s)`);
+        setSegmentInfo(prev => ({ ...prev, loaded: Number(data.frag.sn) + 1 }));
+      });
 
       hls.on(Hls.Events.MANIFEST_PARSED, (event, data) => {
         console.log('HLS manifest loaded, found ' + data.levels.length + ' quality levels');
@@ -238,6 +274,12 @@ export function CustomVideoPlayer({ src, className = "" }: CustomVideoPlayerProp
             <span className="text-white text-sm">
               {formatTime(currentTime)} / {formatTime(duration)}
             </span>
+            
+            {segmentInfo.total > 0 && (
+              <span className="text-zinc-400 text-xs">
+                ({segmentInfo.loaded}/{segmentInfo.total} segments)
+              </span>
+            )}
           </div>
 
           {/* Right Controls */}

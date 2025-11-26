@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   Body,
   Controller,
   Delete,
@@ -25,6 +26,8 @@ import { Roles } from '../../common/decorators/roles.decorator';
 import { UserRole } from '../../common/enums/user-role.enum';
 import { ApproveFileDto } from './dto/approve-file.dto';
 import { RejectFileDto } from './dto/reject-file.dto';
+import { InitiateUploadDto } from './dto/initiate-upload.dto';
+import { CompleteUploadDto } from './dto/complete-upload.dto';
 
 @Controller('files')
 @UseGuards(JwtAccessGuard, RolesGuard)
@@ -129,6 +132,13 @@ export class FilesController {
   ): Promise<StreamableFile> {
     const { file, stream, contentType } = await this.filesService.downloadFile(fileId, user);
     
+    // Block downloading raw video/audio files - must use HLS instead
+    if (file.mimeType?.startsWith('video/') || file.mimeType?.startsWith('audio/')) {
+      throw new BadRequestException(
+        'Cannot download raw media files. Please use HLS streaming or wait for processing to complete.'
+      );
+    }
+    
     return new StreamableFile(stream, {
       type: contentType,
       disposition: `attachment; filename="${encodeURIComponent(file.name)}"`,
@@ -139,7 +149,9 @@ export class FilesController {
   @Roles(UserRole.ADMIN, UserRole.USER)
   @Header('Access-Control-Allow-Origin', '*')
   @Header('Access-Control-Allow-Methods', 'GET, OPTIONS')
-  @Header('Access-Control-Allow-Headers', 'Content-Type')
+  @Header('Access-Control-Allow-Headers', 'Content-Type, Range')
+  @Header('Accept-Ranges', 'bytes')
+  @Header('Cache-Control', 'public, max-age=31536000, immutable') // Cache segments 1 năm
   async streamHLS(
     @Param('id') fileId: string,
     @Param('path') hlsPath: string,
@@ -150,6 +162,51 @@ export class FilesController {
     return new StreamableFile(stream, {
       type: contentType,
     });
+  }
+
+  // ============ CHUNKED UPLOAD ENDPOINTS ============
+  
+  @Post('chunked-upload/initiate')
+  @Roles(UserRole.ADMIN, UserRole.USER)
+  async initiateChunkedUpload(
+    @CurrentUser('id') userId: string,
+    @Body() dto: InitiateUploadDto,
+  ) {
+    return this.filesService.initiateChunkedUpload(userId, dto);
+  }
+
+  @Get('chunked-upload/:fileId/parts')
+  @Roles(UserRole.ADMIN, UserRole.USER)
+  async getUploadPartUrls(
+    @Param('fileId') fileId: string,
+    @CurrentUser('id') userId: string,
+    @Query('start') start: string,
+    @Query('end') end: string,
+  ) {
+    const startPart = parseInt(start, 10);
+    const endPart = parseInt(end, 10);
+    const urls = await this.filesService.getUploadPartUrls(fileId, userId, startPart, endPart);
+    return { urls };
+  }
+
+  @Post('chunked-upload/complete')
+  @Roles(UserRole.ADMIN, UserRole.USER)
+  async completeChunkedUpload(
+    @CurrentUser('id') userId: string,
+    @Body() dto: CompleteUploadDto,
+  ) {
+    const file = await this.filesService.completeChunkedUpload(userId, dto);
+    return this.toResponse(file);
+  }
+
+  @Delete('chunked-upload/:fileId/abort')
+  @Roles(UserRole.ADMIN, UserRole.USER)
+  async abortChunkedUpload(
+    @Param('fileId') fileId: string,
+    @CurrentUser('id') userId: string,
+  ) {
+    await this.filesService.abortChunkedUpload(fileId, userId);
+    return { success: true };
   }
 
   private toResponse(file: any) {
