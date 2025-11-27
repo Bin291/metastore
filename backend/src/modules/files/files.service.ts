@@ -2,6 +2,7 @@ import {
   ForbiddenException,
   Injectable,
   NotFoundException,
+  BadRequestException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, type DeepPartial } from 'typeorm';
@@ -22,6 +23,18 @@ import { AuditAction } from '../../common/enums/audit-action.enum';
 import { AuditActorType } from '../../common/enums/audit-actor-type.enum';
 import { NotificationsService } from '../notifications/notifications.service';
 import { PresignedUrlResult } from '../storage/storage.service';
+import { MediaProcessingService } from '../media/media-processing.service';
+import { InitiateUploadDto } from './dto/initiate-upload.dto';
+import { CompleteUploadDto } from './dto/complete-upload.dto';
+import * as path from 'path';
+import * as fs from 'fs';
+import * as os from 'os';
+import { promisify } from 'util';
+
+const writeFile = promisify(fs.writeFile);
+const mkdir = promisify(fs.mkdir);
+const readFile = promisify(fs.readFile);
+const readdir = promisify(fs.readdir);
 
 @Injectable()
 export class FilesService {
@@ -33,24 +46,30 @@ export class FilesService {
     private readonly storageService: StorageService,
     private readonly auditLogService: AuditLogService,
     private readonly notificationsService: NotificationsService,
+    private readonly mediaProcessingService: MediaProcessingService,
   ) {}
 
   async requestUpload(
     userId: string,
     dto: RequestUploadDto,
+    userRole: UserRole,
   ): Promise<PresignedUrlResult | null> {
     if (dto.isFolder) {
       return null;
     }
 
+    // All uploads go directly to their target bucket (no pending)
+    const visibility = dto.visibility ?? FileVisibility.PRIVATE;
+    const bucketType = visibility === FileVisibility.PUBLIC ? BucketType.PUBLIC : BucketType.PRIVATE;
+
     const key = this.storageService.buildObjectKey(
       userId,
       dto.path,
-      BucketType.PENDING,
+      bucketType,
     );
 
     return this.storageService.getPresignedUploadUrl({
-      bucketType: BucketType.PENDING,
+      bucketType,
       key,
       contentType: dto.mimeType,
     });
@@ -59,11 +78,19 @@ export class FilesService {
   async registerFile(
     userId: string,
     dto: RegisterFileDto,
+    userRole: UserRole,
   ): Promise<FileObject> {
+    const visibility = dto.visibility ?? FileVisibility.PRIVATE;
+    
+    // All files are auto-approved now (no moderation workflow)
+    const status = FileStatus.APPROVED;
+    const bucketType = visibility === FileVisibility.PUBLIC ? BucketType.PUBLIC : BucketType.PRIVATE;
+    const approvedAt = new Date();
+
     const storageKey = this.storageService.buildObjectKey(
       userId,
       dto.path,
-      BucketType.PENDING,
+      bucketType,
     );
 
     const filePayload: DeepPartial<FileObject> = {
@@ -74,21 +101,36 @@ export class FilesService {
       size: String(dto.size ?? 0),
       mimeType: dto.mimeType,
       checksum: dto.checksum,
-      status: dto.isFolder ? FileStatus.APPROVED : FileStatus.PENDING,
-      bucketType: dto.isFolder ? BucketType.PRIVATE : BucketType.PENDING,
-      visibility: dto.visibility ?? FileVisibility.PRIVATE,
+      status,
+      bucketType,
+      visibility,
       ownerId: userId,
       parentId: dto.parentId ?? null,
       metadata: {},
-      approvedAt: dto.isFolder ? new Date() : null,
+      approvedAt,
     };
 
     const file = this.fileRepository.create(filePayload);
-
     const saved = await this.fileRepository.save(file);
 
-    // Only create moderation task for files, not folders
-    if (!dto.isFolder) {
+    // No moderation tasks needed anymore - all files auto-approved
+    // Process media files (video/audio) for HLS streaming
+    if (!dto.isFolder && saved.mimeType) {
+      if (saved.mimeType.startsWith('video/')) {
+        // Trigger video processing asynchronously
+        this.processVideoFile(saved.id, userId).catch(err => 
+          console.error(`Failed to process video ${saved.id}:`, err)
+        );
+      } else if (saved.mimeType.startsWith('audio/')) {
+        // Trigger audio processing asynchronously  
+        this.processAudioFile(saved.id, userId).catch(err =>
+          console.error(`Failed to process audio ${saved.id}:`, err)
+        );
+      }
+    }
+
+    // Skip old moderation task creation
+    if (false && !dto.isFolder && visibility === FileVisibility.PUBLIC && userRole !== UserRole.ADMIN) {
       const moderationTask = this.moderationRepository.create({
         fileId: saved.id,
       } as DeepPartial<ModerationTask>);
@@ -96,7 +138,7 @@ export class FilesService {
     }
 
     await this.auditLogService.record({
-      action: AuditAction.FILE_UPDATED,
+      action: AuditAction.FILE_UPLOADED,
       userId,
       actorType: AuditActorType.USER,
       resourceId: saved.id,
@@ -104,8 +146,23 @@ export class FilesService {
       metadata: {
         name: saved.name,
         size: saved.size,
+        visibility,
+        status,
       },
     });
+
+    // Trigger media processing for video/audio files (async, don't wait)
+    if (!dto.isFolder && dto.mimeType) {
+      if (dto.mimeType.startsWith('video/')) {
+        this.processVideoFile(saved.id, userId).catch(err => {
+          console.error(`Failed to process video ${saved.id}:`, err);
+        });
+      } else if (dto.mimeType.startsWith('audio/')) {
+        this.processAudioFile(saved.id, userId).catch(err => {
+          console.error(`Failed to process audio ${saved.id}:`, err);
+        });
+      }
+    }
 
     return saved;
   }
@@ -119,16 +176,32 @@ export class FilesService {
 
     const qb = this.fileRepository.createQueryBuilder('file');
 
-    // Default behavior: users only see their own files
-    // Only admins can filter by other users' files if explicitly specified
+    // Users can see:
+    // 1. Their own files (private + public)
+    // 2. Other users' public files
     if (user.role === UserRole.ADMIN && query.ownerId) {
+      // Admin with ownerId filter: see that user's files
       qb.andWhere('file.ownerId = :ownerId', { ownerId: query.ownerId });
     } else if (user.role === UserRole.USER) {
-      // Users can only see their own files
-      qb.andWhere('file.ownerId = :ownerId', { ownerId: user.id });
+      // Regular users: their own files OR public files from others
+      qb.andWhere(
+        '(file.ownerId = :userId OR (file.visibility = :publicVisibility AND file.status = :approvedStatus))',
+        { 
+          userId: user.id,
+          publicVisibility: FileVisibility.PUBLIC,
+          approvedStatus: FileStatus.APPROVED
+        }
+      );
     } else {
-      // Admin without filter: see only their own files by default
-      qb.andWhere('file.ownerId = :ownerId', { ownerId: user.id });
+      // Admin without filter: see all files (own + public from others)
+      qb.andWhere(
+        '(file.ownerId = :userId OR (file.visibility = :publicVisibility AND file.status = :approvedStatus))',
+        { 
+          userId: user.id,
+          publicVisibility: FileVisibility.PUBLIC,
+          approvedStatus: FileStatus.APPROVED
+        }
+      );
     }
 
     if (query.status) {
@@ -377,10 +450,102 @@ export class FilesService {
       throw new ForbiddenException('Access denied');
     }
 
+    // Block download URL for video/audio files - must use HLS
+    if (file.mimeType?.startsWith('video/') || file.mimeType?.startsWith('audio/')) {
+      throw new BadRequestException(
+        'Cannot download raw media files. Please use HLS streaming.'
+      );
+    }
+
     return this.storageService.getPresignedDownloadUrl({
       bucketType: file.bucketType,
       key: file.storageKey,
     });
+  }
+
+  async downloadFile(
+    fileId: string,
+    user: { id: string; role: UserRole } | null,
+  ): Promise<{ file: FileObject; stream: any; contentType?: string }> {
+    const file = await this.fileRepository.findOne({ where: { id: fileId } });
+    if (!file) {
+      throw new NotFoundException('File not found');
+    }
+
+    if (!this.canAccessFile(file, user)) {
+      throw new ForbiddenException('Access denied');
+    }
+
+    if (file.isFolder) {
+      throw new ForbiddenException('Cannot download a folder');
+    }
+
+    // Block download for video/audio files - must use HLS
+    if (file.mimeType?.startsWith('video/') || file.mimeType?.startsWith('audio/')) {
+      throw new BadRequestException(
+        'Cannot download raw media files. Please use HLS streaming.'
+      );
+    }
+
+    const { stream, contentType } = await this.storageService.downloadFile({
+      bucketType: file.bucketType,
+      key: file.storageKey,
+    });
+
+    await this.auditLogService.record({
+      action: AuditAction.FILE_DOWNLOADED,
+      userId: user?.id ?? 'anonymous',
+      actorType: AuditActorType.USER,
+      resourceId: file.id,
+      resourceType: 'file',
+      metadata: {
+        name: file.name,
+      },
+    });
+
+    return { file, stream, contentType: contentType ?? file.mimeType ?? undefined };
+  }
+
+  /**
+   * Stream HLS playlist or segment files
+   */
+  async streamHLS(
+    fileId: string,
+    hlsPath: string,
+    user: { id: string; role: UserRole },
+  ): Promise<{ stream: any; contentType: string }> {
+    const file = await this.fileRepository.findOne({ where: { id: fileId } });
+    if (!file) {
+      throw new NotFoundException('File not found');
+    }
+
+    if (!this.canAccessFile(file, user)) {
+      throw new ForbiddenException('Access denied');
+    }
+
+    // Check if file has HLS metadata
+    const hlsMetadata = (file.metadata as any)?.hls;
+    if (!hlsMetadata || !hlsMetadata.processed) {
+      throw new NotFoundException('HLS version not available');
+    }
+
+    // Build key for HLS file
+    const key = `${file.ownerId}/${fileId}/hls/${hlsPath}`;
+
+    const { stream, contentType } = await this.storageService.downloadFile({
+      bucketType: file.bucketType,
+      key,
+    });
+
+    // Determine content type based on file extension
+    let finalContentType = contentType;
+    if (hlsPath.endsWith('.m3u8')) {
+      finalContentType = 'application/vnd.apple.mpegurl';
+    } else if (hlsPath.endsWith('.ts')) {
+      finalContentType = 'video/MP2T';
+    }
+
+    return { stream, contentType: finalContentType || 'application/octet-stream' };
   }
 
   private canAccessFile(
@@ -400,6 +565,473 @@ export class FilesService {
     }
 
     return file.ownerId === user.id;
+  }
+
+  /**
+   * Process uploaded video file into HLS format
+   */
+  private async processVideoFile(
+    fileId: string,
+    userId: string,
+  ): Promise<void> {
+    const file = await this.fileRepository.findOne({ where: { id: fileId } });
+    if (!file) return;
+
+    const tempDir = path.join(os.tmpdir(), 'metastore-hls', fileId);
+
+    try {
+      // Download original file from MinIO
+      const { stream } = await this.storageService.downloadFile({
+        bucketType: file.bucketType,
+        key: file.storageKey,
+      });
+
+      // Create temp directory for processing
+      await mkdir(tempDir, { recursive: true });
+      
+      const inputPath = path.join(tempDir, 'original.mp4');
+      const outputDir = path.join(tempDir, 'hls');
+
+      // Save stream to temp file
+      const writeStream = fs.createWriteStream(inputPath);
+      await new Promise<void>((resolve, reject) => {
+        stream.pipe(writeStream);
+        writeStream.on('finish', () => resolve());
+        writeStream.on('error', reject);
+      });
+
+      // Process video to HLS
+      const result = await this.mediaProcessingService.processVideo(
+        inputPath,
+        outputDir,
+        file.name,
+      );
+
+      console.log(`Video processed - Duration: ${result.duration}s, Qualities: ${result.qualities.length}`);
+
+      // Upload HLS files back to MinIO
+      await this.uploadHLSFiles(file, userId, outputDir, result);
+
+      // Update file metadata with HLS info
+      await this.fileRepository.update(file.id, {
+        duration: result.duration,
+        metadata: {
+          ...file.metadata,
+          hls: {
+            masterPlaylist: result.masterPlaylistPath,
+            qualities: result.qualities,
+            duration: result.duration,
+            processed: true,
+          },
+        },
+      });
+
+      console.log(`Video processing completed for file ${fileId}`);
+    } catch (error) {
+      console.error(`Video processing failed for file ${fileId}:`, error);
+      // Update metadata to mark processing as failed
+      await this.fileRepository.update(fileId, {
+        metadata: {
+          ...file.metadata,
+          hls: {
+            processed: false,
+            error: error.message,
+          },
+        },
+      });
+    } finally {
+      // Cleanup temp files after upload completes or fails
+      try {
+        await this.mediaProcessingService.cleanupMedia(tempDir);
+      } catch (cleanupError) {
+        console.error(`Failed to cleanup temp directory ${tempDir}:`, cleanupError);
+      }
+    }
+  }
+
+  /**
+   * Process uploaded audio file into HLS format
+   */
+  private async processAudioFile(
+    fileId: string,
+    userId: string,
+  ): Promise<void> {
+    const file = await this.fileRepository.findOne({ where: { id: fileId } });
+    if (!file) return;
+
+    const tempDir = path.join(os.tmpdir(), 'metastore-hls', fileId);
+
+    try {
+      // Download original file from MinIO
+      const { stream } = await this.storageService.downloadFile({
+        bucketType: file.bucketType,
+        key: file.storageKey,
+      });
+
+      // Create temp directory for processing
+      await mkdir(tempDir, { recursive: true });
+      
+      const inputPath = path.join(tempDir, 'original.mp3');
+      const outputDir = path.join(tempDir, 'hls');
+
+      // Save stream to temp file
+      const writeStream = fs.createWriteStream(inputPath);
+      await new Promise<void>((resolve, reject) => {
+        stream.pipe(writeStream);
+        writeStream.on('finish', () => resolve());
+        writeStream.on('error', reject);
+      });
+
+      // Process audio to HLS
+      const result = await this.mediaProcessingService.processAudio(
+        inputPath,
+        outputDir,
+        file.name,
+      );
+
+      console.log(`Audio processed - Duration: ${result.duration}s`);
+
+      // Upload HLS files back to MinIO
+      await this.uploadHLSFiles(file, userId, outputDir, result);
+
+      // Update file metadata with HLS info
+      await this.fileRepository.update(file.id, {
+        duration: result.duration,
+        metadata: {
+          ...file.metadata,
+          hls: {
+            masterPlaylist: result.masterPlaylistPath,
+            duration: result.duration,
+            processed: true,
+          },
+        },
+      });
+
+      console.log(`Audio processing completed for file ${fileId}`);
+    } catch (error) {
+      console.error(`Audio processing failed for file ${fileId}:`, error);
+      await this.fileRepository.update(fileId, {
+        metadata: {
+          ...file.metadata,
+          hls: {
+            processed: false,
+            error: error.message,
+          },
+        },
+      });
+    } finally {
+      // Cleanup temp files after upload completes or fails
+      try {
+        await this.mediaProcessingService.cleanupMedia(tempDir);
+      } catch (cleanupError) {
+        console.error(`Failed to cleanup temp directory ${tempDir}:`, cleanupError);
+      }
+    }
+  }
+
+  /**
+   * Upload HLS files to MinIO
+   */
+  private async uploadHLSFiles(
+    file: FileObject,
+    userId: string,
+    hlsDir: string,
+    result: any,
+  ): Promise<void> {
+    const uploadFile = async (localPath: string, remotePath: string) => {
+      // Check if file exists before reading
+      if (!fs.existsSync(localPath)) {
+        console.warn(`Skipping non-existent file: ${localPath}`);
+        return;
+      }
+
+      const content = await readFile(localPath);
+      const key = `${userId}/${file.id}/hls/${remotePath}`;
+      
+      await this.storageService.uploadFile({
+        bucketType: file.bucketType,
+        key,
+        content,
+        contentType: remotePath.endsWith('.m3u8') ? 'application/vnd.apple.mpegurl' : 'video/MP2T',
+      });
+    };
+
+    // Upload all files recursively
+    const uploadDir = async (dir: string, prefix = '') => {
+      const entries = await readdir(dir, { withFileTypes: true });
+      
+      for (const entry of entries) {
+        const fullPath = path.join(dir, entry.name);
+        const remotePath = prefix ? `${prefix}/${entry.name}` : entry.name;
+        
+        if (entry.isDirectory()) {
+          await uploadDir(fullPath, remotePath);
+        } else {
+          await uploadFile(fullPath, remotePath);
+        }
+      }
+    };
+
+    await uploadDir(hlsDir);
+  }
+
+  /**
+   * Initiate chunked upload for large files
+   */
+  async initiateChunkedUpload(
+    userId: string,
+    dto: InitiateUploadDto,
+  ): Promise<{ fileId: string; uploadId: string; uploadUrls: string[] }> {
+    const visibility = dto.visibility ?? FileVisibility.PRIVATE;
+    const bucketType = visibility === FileVisibility.PUBLIC ? BucketType.PUBLIC : BucketType.PRIVATE;
+
+    // Create file record first with UPLOADING status
+    const storageKey = this.storageService.buildObjectKey(
+      userId,
+      dto.path || dto.fileName,
+      bucketType,
+    );
+
+    const filePayload: DeepPartial<FileObject> = {
+      name: dto.fileName,
+      path: dto.path || dto.fileName,
+      storageKey,
+      isFolder: false,
+      size: String(dto.fileSize),
+      mimeType: dto.mimeType,
+      checksum: dto.checksum,
+      status: FileStatus.PENDING, // Mark as pending until upload completes
+      bucketType,
+      visibility,
+      ownerId: userId,
+      parentId: dto.parentId ?? null,
+      metadata: {
+        uploading: true,
+        uploadStartedAt: new Date().toISOString(),
+      },
+    };
+
+    const file = this.fileRepository.create(filePayload);
+    const savedFile = await this.fileRepository.save(file);
+
+    // Initiate multipart upload with MinIO
+    const uploadId = await this.storageService.initiateMultipartUpload({
+      bucketType,
+      key: storageKey,
+      contentType: dto.mimeType,
+    });
+
+    // Calculate number of parts (5MB chunks recommended for MinIO)
+    const CHUNK_SIZE = 5 * 1024 * 1024; // 5MB
+    const totalParts = Math.ceil(dto.fileSize / CHUNK_SIZE);
+
+    // Generate presigned URLs for each part (up to 100 parts at a time to avoid timeout)
+    const maxPartsToGenerate = Math.min(totalParts, 100);
+    const uploadUrls: string[] = [];
+
+    for (let i = 1; i <= maxPartsToGenerate; i++) {
+      const url = await this.storageService.getPresignedUploadPartUrl({
+        bucketType,
+        key: storageKey,
+        uploadId,
+        partNumber: i,
+        expiresIn: 3600, // 1 hour
+      });
+      uploadUrls.push(url);
+    }
+
+    // Store upload metadata
+    await this.fileRepository.update(savedFile.id, {
+      metadata: {
+        ...savedFile.metadata,
+        uploadId,
+        totalParts,
+        uploadedParts: [],
+      },
+    });
+
+    return {
+      fileId: savedFile.id,
+      uploadId,
+      uploadUrls,
+    };
+  }
+
+  /**
+   * Get additional upload part URLs if needed
+   */
+  async getUploadPartUrls(
+    fileId: string,
+    userId: string,
+    startPart: number,
+    endPart: number,
+  ): Promise<string[]> {
+    const file = await this.fileRepository.findOne({ where: { id: fileId } });
+    
+    if (!file || file.ownerId !== userId) {
+      throw new ForbiddenException('Access denied');
+    }
+
+    const uploadId = (file.metadata as any)?.uploadId;
+    if (!uploadId) {
+      throw new BadRequestException('No active upload found');
+    }
+
+    const uploadUrls: string[] = [];
+    for (let i = startPart; i <= endPart; i++) {
+      const url = await this.storageService.getPresignedUploadPartUrl({
+        bucketType: file.bucketType,
+        key: file.storageKey,
+        uploadId,
+        partNumber: i,
+        expiresIn: 3600,
+      });
+      uploadUrls.push(url);
+    }
+
+    return uploadUrls;
+  }
+
+  /**
+   * Complete chunked upload
+   */
+  async completeChunkedUpload(
+    userId: string,
+    dto: CompleteUploadDto,
+  ): Promise<FileObject> {
+    const file = await this.fileRepository.findOne({ where: { id: dto.fileId } });
+    
+    if (!file || file.ownerId !== userId) {
+      throw new ForbiddenException('Access denied');
+    }
+
+    const uploadId = (file.metadata as any)?.uploadId;
+    if (!uploadId || uploadId !== dto.uploadId) {
+      throw new BadRequestException('Invalid upload ID');
+    }
+
+    // Complete multipart upload
+    await this.storageService.completeMultipartUpload({
+      bucketType: file.bucketType,
+      key: file.storageKey,
+      uploadId: dto.uploadId,
+      parts: dto.parts.map(p => ({
+        PartNumber: p.partNumber,
+        ETag: p.etag,
+      })),
+    });
+
+    // Update file status and mark as processing if media file
+    const isMediaFile = file.mimeType?.startsWith('video/') || file.mimeType?.startsWith('audio/');
+    
+    let updatedFile = await this.fileRepository.save({
+      ...file,
+      status: FileStatus.APPROVED, // Auto-approve
+      approvedAt: new Date(),
+      metadata: {
+        ...file.metadata,
+        uploading: false,
+        uploadCompletedAt: new Date().toISOString(),
+        uploadId: undefined,
+        processing: isMediaFile, // Mark as processing if media
+        processingStartedAt: isMediaFile ? new Date().toISOString() : undefined,
+      },
+    });
+
+    // Process media files ASYNCHRONOUSLY (don't wait)
+    if (file.mimeType?.startsWith('video/')) {
+      // Process in background
+      this.processVideoFile(updatedFile.id, userId)
+        .then(async () => {
+          // Update success status
+          await this.fileRepository.update(updatedFile.id, {
+            metadata: {
+              ...updatedFile.metadata,
+              processing: false,
+              processingCompletedAt: new Date().toISOString(),
+            },
+          });
+          console.log(`Video processing completed for ${updatedFile.id}`);
+        })
+        .catch(async (err) => {
+          console.error(`Failed to process video ${updatedFile.id}:`, err);
+          // Mark processing as failed
+          await this.fileRepository.update(updatedFile.id, {
+            metadata: {
+              ...updatedFile.metadata,
+              processing: false,
+              processingError: err.message,
+            },
+          });
+        });
+    } else if (file.mimeType?.startsWith('audio/')) {
+      // Process in background
+      this.processAudioFile(updatedFile.id, userId)
+        .then(async () => {
+          await this.fileRepository.update(updatedFile.id, {
+            metadata: {
+              ...updatedFile.metadata,
+              processing: false,
+              processingCompletedAt: new Date().toISOString(),
+            },
+          });
+          console.log(`Audio processing completed for ${updatedFile.id}`);
+        })
+        .catch(async (err) => {
+          console.error(`Failed to process audio ${updatedFile.id}:`, err);
+          await this.fileRepository.update(updatedFile.id, {
+            metadata: {
+              ...updatedFile.metadata,
+              processing: false,
+              processingError: err.message,
+            },
+          });
+        });
+    }
+
+    // Reload file with updated metadata
+    const reloadedFile = await this.fileRepository.findOne({ where: { id: updatedFile.id } });
+    
+    await this.auditLogService.record({
+      action: AuditAction.FILE_UPLOADED,
+      userId,
+      actorType: AuditActorType.USER,
+      resourceId: reloadedFile?.id || updatedFile.id,
+      resourceType: 'file',
+      metadata: {
+        name: reloadedFile?.name || updatedFile.name,
+        size: reloadedFile?.size || updatedFile.size,
+        chunked: true,
+      },
+    });
+
+    return reloadedFile || updatedFile;
+  }
+
+  /**
+   * Abort chunked upload
+   */
+  async abortChunkedUpload(
+    fileId: string,
+    userId: string,
+  ): Promise<void> {
+    const file = await this.fileRepository.findOne({ where: { id: fileId } });
+    
+    if (!file || file.ownerId !== userId) {
+      throw new ForbiddenException('Access denied');
+    }
+
+    const uploadId = (file.metadata as any)?.uploadId;
+    if (uploadId) {
+      await this.storageService.abortMultipartUpload({
+        bucketType: file.bucketType,
+        key: file.storageKey,
+        uploadId,
+      });
+    }
+
+    // Delete file record
+    await this.fileRepository.delete(fileId);
   }
 }
 

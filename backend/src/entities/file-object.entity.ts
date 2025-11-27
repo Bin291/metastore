@@ -97,6 +97,9 @@ export class FileObject extends BaseEntity {
   }})
   metadata?: Record<string, unknown> | null;
 
+  @Column({ name: 'duration', type: 'float', nullable: true, comment: 'Duration in seconds for video/audio files' })
+  duration?: number | null;
+
   @Column({ name: 'approved_at', type: 'datetime', nullable: true })
   approvedAt?: Date | null;
 

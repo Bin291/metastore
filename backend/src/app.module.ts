@@ -12,6 +12,7 @@ import { FilesModule } from './modules/files/files.module';
 import { ShareLinksModule } from './modules/share-links/share-links.module';
 import { StorageModule } from './modules/storage/storage.module';
 import { NotificationsModule } from './modules/notifications/notifications.module';
+import { MediaModule } from './modules/media/media.module';
 
 @Module({
   imports: [
@@ -48,6 +49,7 @@ import { NotificationsModule } from './modules/notifications/notifications.modul
       },
     }),
     StorageModule,
+    MediaModule,
     UsersModule,
     InvitesModule,
     AuthModule,

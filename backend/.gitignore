@@ -53,6 +53,12 @@ lerna-debug.log*
 # temp directory
 .temp
 .tmp
+temp/
+
+# HLS video segments (binary files)
+*.ts
+!src/**/*.ts
+!test/**/*.ts
 
 # Runtime data
 pids

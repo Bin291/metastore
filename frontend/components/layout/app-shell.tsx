@@ -99,8 +99,8 @@ export function AppShell({ children }: AppShellProps) {
   }
 
   return (
-    <div className="flex min-h-screen bg-zinc-950 text-zinc-100">
-      <aside className="hidden w-64 flex-col border-r border-zinc-800 bg-zinc-950/40 p-6 md:flex">
+    <div className="flex h-screen bg-zinc-950 text-zinc-100 overflow-hidden">
+      <aside className="hidden w-64 flex-col border-r border-zinc-800 bg-zinc-950/40 p-6 md:flex flex-shrink-0">
         <div className="mb-8">
           <h1 className="text-xl font-semibold text-white">MetaStore</h1>
           <p className="mt-1 text-xs text-zinc-500">
@@ -137,8 +137,8 @@ export function AppShell({ children }: AppShellProps) {
           Logout
         </Button>
       </aside>
-      <div className="flex flex-1 flex-col">
-        <header className="flex items-center justify-between border-b border-zinc-800 bg-zinc-950/80 px-6 py-4 shadow-sm">
+      <div className="flex flex-1 flex-col overflow-hidden">
+        <header className="flex-shrink-0 flex items-center justify-between border-b border-zinc-800 bg-zinc-950/80 px-6 py-4 shadow-sm">
           <div>
             <h2 className="text-lg font-semibold text-white">
               Welcome back, {user.username}
@@ -204,8 +204,10 @@ export function AppShell({ children }: AppShellProps) {
             </Button>
           </div>
         </header>
-        <main className="flex-1 overflow-y-auto bg-zinc-950 p-6">
-          <div className="mx-auto w-full max-w-6xl">{children}</div>
+        <main className="flex-1 overflow-y-auto bg-zinc-950">
+          <div className="p-6">
+            {children}
+          </div>
         </main>
       </div>
     </div>

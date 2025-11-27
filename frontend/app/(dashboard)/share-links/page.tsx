@@ -77,7 +77,7 @@ export default function ShareLinksPage() {
   const links: ShareLink[] = shareLinksQuery.data?.data ?? [];
 
   return (
-    <div className="space-y-6">
+    <div className="max-w-7xl mx-auto space-y-6 px-4">
       <Card className="p-6">
         <h2 className="text-lg font-semibold text-white">Create Share Link</h2>
         <p className="mb-4 text-sm text-zinc-500">
