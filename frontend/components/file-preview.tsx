@@ -45,21 +45,15 @@ export function FilePreview({ file, onClose }: FilePreviewProps) {
     // For video/audio files, check if HLS is available
     if (file.mimeType.startsWith("video/") || file.mimeType.startsWith("audio/")) {
       const metadata = file.metadata as any;
-      const isProcessing = metadata?.processing === true;
       const hlsMetadata = metadata?.hls;
-      
       if (hlsMetadata?.processed && hlsMetadata?.masterPlaylist) {
         // Use HLS streaming URL
         const hlsUrl = `/api/files/${file.id}/hls/${hlsMetadata.masterPlaylist}`;
         setPreviewUrl(hlsUrl);
         return;
-      } else if (isProcessing || !hlsMetadata?.processed) {
-        // Still processing or not processed yet
-        setPreviewError("Media file is being processed. Please wait for HLS conversion to complete...");
-        return;
       } else {
-        // Processing failed or error
-        setPreviewError("Media processing failed. Cannot preview this file.");
+        // Fallback: play original file while processing
+        downloadMutation.mutate();
         return;
       }
     }
@@ -174,7 +168,16 @@ export function FilePreview({ file, onClose }: FilePreviewProps) {
           {previewUrl && file.mimeType?.startsWith("video/") && (
             <div className="w-full h-full flex items-center justify-center p-4">
               <div className="w-full" style={{ maxWidth: '1280px', aspectRatio: '16/9' }}>
-                <CustomVideoPlayer src={previewUrl} className="w-full h-full" />
+                {previewUrl.endsWith('.m3u8') || previewUrl.includes('/hls/') ? (
+                  <CustomVideoPlayer src={previewUrl} className="w-full h-full" />
+                ) : (
+                  <video
+                    src={previewUrl}
+                    controls
+                    className="w-full h-full bg-black"
+                    style={{ borderRadius: 8 }}
+                  />
+                )}
               </div>
             </div>
           )}

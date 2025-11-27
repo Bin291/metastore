@@ -450,11 +450,18 @@ export class FilesService {
       throw new ForbiddenException('Access denied');
     }
 
-    // Block download URL for video/audio files - must use HLS
+
+    // Block download URL for video/audio files - must use HLS, except owner/admin and HLS not ready
     if (file.mimeType?.startsWith('video/') || file.mimeType?.startsWith('audio/')) {
-      throw new BadRequestException(
-        'Cannot download raw media files. Please use HLS streaming.'
-      );
+      const metadata = file.metadata as any;
+      const hlsProcessed = metadata?.hls?.processed === true;
+      const isOwner = user && (user.role === UserRole.ADMIN || file.ownerId === user.id);
+      if (hlsProcessed || !isOwner) {
+        throw new BadRequestException(
+          'Cannot download raw media files. Please use HLS streaming.'
+        );
+      }
+      // Allow owner/admin to get raw file if HLS not ready
     }
 
     return this.storageService.getPresignedDownloadUrl({

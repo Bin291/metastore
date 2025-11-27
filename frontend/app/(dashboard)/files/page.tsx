@@ -441,8 +441,10 @@ export default function FilesPage() {
   };
 
   const files: FileItem[] = filesQuery.data?.data ?? [];
-  const folders = files.filter((f) => f.isFolder);
-  const fileItems = files.filter((f) => !f.isFolder);
+  // Chỉ lấy các file/folder có parentId trùng với currentFolderId (root là null)
+  const visibleItems = files.filter((f) => f.parentId === currentFolderId);
+  const folders = visibleItems.filter((f) => f.isFolder);
+  const fileItems = visibleItems.filter((f) => !f.isFolder);
 
   return (
     <div className="max-w-7xl mx-auto space-y-6 px-4">
@@ -660,20 +662,28 @@ export default function FilesPage() {
       </Card>
 
       {/* Breadcrumb Navigation */}
-      {currentFolderId && (
-        <Card className="flex items-center gap-2 p-3">
-          <Button
-            variant="ghost"
-            onClick={() => setCurrentFolderId(null)}
-            className="gap-2 text-sm"
-          >
-            <FiHome className="h-4 w-4" />
-            Root
-          </Button>
-          <FiChevronRight className="h-4 w-4 text-zinc-500" />
-          <span className="text-sm text-zinc-300">Current Folder</span>
-        </Card>
-      )}
+      <Card className="flex items-center gap-2 p-3">
+        <Button
+          variant="ghost"
+          onClick={() => setCurrentFolderId(null)}
+          className="gap-2 text-sm"
+        >
+          <FiHome className="h-4 w-4" />
+          Root
+        </Button>
+        {/* Hiển thị breadcrumb động */}
+        {currentFolderId && (
+          <>
+            <FiChevronRight className="h-4 w-4 text-zinc-500" />
+            <span className="text-sm text-zinc-300">
+              {(() => {
+                const currentFolder = files.find(f => f.id === currentFolderId);
+                return currentFolder ? currentFolder.name : "Current Folder";
+              })()}
+            </span>
+          </>
+        )}
+      </Card>
 
       {/* Files Table */}
       <div className="overflow-hidden rounded-2xl border border-zinc-800">
