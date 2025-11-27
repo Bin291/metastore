@@ -9,9 +9,11 @@ import {
   Patch,
   Post,
   Query,
+  Res,
   StreamableFile,
   UseGuards,
 } from '@nestjs/common';
+import type { Response } from 'express';
 import { plainToInstance } from 'class-transformer';
 import { FilesService } from './files.service';
 import { JwtAccessGuard } from '../../common/guards/jwt-access.guard';
@@ -148,16 +150,24 @@ export class FilesController {
   @Get(':id/hls/*path')
   @Roles(UserRole.ADMIN, UserRole.USER)
   @Header('Access-Control-Allow-Origin', '*')
-  @Header('Access-Control-Allow-Methods', 'GET, OPTIONS')
-  @Header('Access-Control-Allow-Headers', 'Content-Type, Range')
+  @Header('Access-Control-Allow-Methods', 'GET, HEAD, OPTIONS')
+  @Header('Access-Control-Allow-Headers', 'Content-Type, Range, Accept')
+  @Header('Access-Control-Expose-Headers', 'Content-Length, Content-Range')
   @Header('Accept-Ranges', 'bytes')
-  @Header('Cache-Control', 'public, max-age=31536000, immutable') // Cache segments 1 năm
   async streamHLS(
     @Param('id') fileId: string,
     @Param('path') hlsPath: string,
     @CurrentUser() user: { id: string; role: UserRole },
+    @Res({ passthrough: true }) res: Response,
   ): Promise<StreamableFile> {
     const { stream, contentType } = await this.filesService.streamHLS(fileId, hlsPath, user);
+    
+    // Set appropriate cache headers based on file type
+    if (hlsPath.endsWith('.m3u8')) {
+      res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+    } else if (hlsPath.endsWith('.ts')) {
+      res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
+    }
     
     return new StreamableFile(stream, {
       type: contentType,

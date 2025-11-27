@@ -167,12 +167,14 @@ export class MediaProcessingService {
           .videoCodec('libx264')
           .outputOptions([
             '-preset fast',
-            '-profile:v main',
-            '-level 4.0',
+            '-profile:v baseline', // Change to baseline for better compatibility
+            '-level 3.0', // Lower level for better compatibility
             '-crf 23',
+            '-pix_fmt yuv420p', // Ensure pixel format compatibility
             '-sc_threshold 0', // Disable scene change detection for consistent segments
             '-g 48', // GOP size (keyframe every 2 seconds at 24fps)
             '-keyint_min 48',
+            '-force_key_frames expr:gte(t,n_forced*2)', // Force keyframe every 2 seconds
           ]);
       } else {
         // Audio-only, no video
@@ -184,7 +186,10 @@ export class MediaProcessingService {
         .audioBitrate(audioBitrate)
         .audioCodec('aac')
         .audioChannels(2)
-        .audioFrequency(44100);
+        .audioFrequency(44100)
+        .outputOptions([
+          '-ac 2', // Force stereo
+        ]);
 
       // HLS-specific options
       command = command.outputOptions([
@@ -192,6 +197,7 @@ export class MediaProcessingService {
         '-hls_time 6', // 6 second segments for fast streaming
         '-hls_list_size 0', // Include all segments in playlist
         '-hls_segment_type mpegts', // Use MPEG-TS container
+        '-hls_flags independent_segments', // Make segments independent
         '-hls_segment_filename', segmentPattern,
         '-f hls',
       ]);
@@ -243,11 +249,23 @@ export class MediaProcessingService {
     content += '#EXT-X-VERSION:3\n\n';
 
     for (const quality of qualities) {
-      const resolution = quality.resolution === 'audio' 
-        ? '' 
-        : `,RESOLUTION=${quality.resolution.replace('p', '').split('x').reverse().join('x')}`;
+      // Extract resolution from quality name (e.g., "1080p" -> "1920x1080")
+      let resolutionTag = '';
+      if (quality.resolution !== 'audio') {
+        // Map quality names to resolutions
+        const resolutionMap: Record<string, string> = {
+          '1080p': '1920x1080',
+          '720p': '1280x720',
+          '480p': '854x480',
+          '360p': '640x360',
+        };
+        const res = resolutionMap[quality.resolution];
+        if (res) {
+          resolutionTag = `,RESOLUTION=${res}`;
+        }
+      }
       
-      content += `#EXT-X-STREAM-INF:BANDWIDTH=${quality.bandwidth}${resolution}\n`;
+      content += `#EXT-X-STREAM-INF:BANDWIDTH=${quality.bandwidth}${resolutionTag}\n`;
       content += `${quality.playlistPath}\n`;
     }
 

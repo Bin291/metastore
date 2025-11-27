@@ -1,0 +1,31 @@
+services:
+  - name: backend
+    buildCommand: cd backend && npm install && npm run build
+    startCommand: cd backend && npm run start:prod
+    healthcheckPath: /api/health
+    region: ap-southeast-1
+    env:
+      NODE_ENV: production
+      PORT: 3001
+      
+      # Database - Supabase PostgreSQL (FREE)
+      DATABASE_TYPE: postgres
+      DATABASE_URL: ${{DATABASE_URL}}
+      
+      # Storage - Cloudflare R2 (FREE 10GB)
+      MINIO_ENDPOINT: ${{R2_ENDPOINT}}
+      MINIO_PORT: 443
+      MINIO_USE_SSL: true
+      MINIO_ACCESS_KEY: ${{R2_ACCESS_KEY}}
+      MINIO_SECRET_KEY: ${{R2_SECRET_KEY}}
+      
+      # Disable video processing (FFmpeg not available on FREE tier)
+      ENABLE_VIDEO_PROCESSING: false
+      
+      # JWT Secrets
+      JWT_ACCESS_SECRET: ${{JWT_ACCESS_SECRET}}
+      JWT_REFRESH_SECRET: ${{JWT_REFRESH_SECRET}}
+      
+      # CORS - Add your Vercel domain
+      CORS_ORIGINS: https://your-app.vercel.app
+

@@ -1,0 +1,16 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "buildCommand": "cd frontend && npm install && npm run build",
+  "outputDirectory": "frontend/.next",
+  "framework": "nextjs",
+  "installCommand": "npm install --prefix frontend",
+  "devCommand": "cd frontend && npm run dev",
+  "cleanUrls": true,
+  "trailingSlash": false,
+  "regions": ["sin1"],
+  "env": {
+    "NEXT_PUBLIC_API_URL": "https://your-region-your-project.cloudfunctions.net/api",
+    "NEXT_PUBLIC_FIREBASE_API_KEY": "BHlf2VRcsX0qlvlsFFfLGCONLDpDjhEy8bFcCv2uFpVpmG9wKLEKEktFaZ14OEAZ0YCGPzC1DlZeRlggcuPr4iw",
+    "NEXT_PUBLIC_FIREBASE_PROJECT_ID": "metasto-ea890"
+  }
+}
