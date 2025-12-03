@@ -31,6 +31,30 @@ export class UsersService {
     private readonly configService: ConfigService,
   ) {}
 
+  async createUser(params: {
+    email: string;
+    username: string;
+    passwordHash: string;
+    role: UserRole;
+    phone?: string;
+    createdBy?: string;
+  }): Promise<User> {
+    const user = this.userRepository.create({
+      email: params.email,
+      username: params.username,
+      passwordHash: params.passwordHash,
+      role: params.role,
+      phone: params.phone,
+      status: UserStatus.ACTIVE,
+      bucketPrefix: 'pending',
+    });
+    const saved = await this.userRepository.save(user);
+    const bucketPrefix = this.generateBucketPrefix(saved.id);
+    await this.userRepository.update(saved.id, { bucketPrefix });
+    saved.bucketPrefix = bucketPrefix;
+    return saved;
+  }
+
   async ensureDefaultAdmin(): Promise<{ created: boolean; username: string }> {
     const adminConfig = this.configService.get<{
       defaultUsername: string;

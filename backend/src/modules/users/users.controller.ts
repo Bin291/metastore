@@ -4,6 +4,7 @@ import {
   Get,
   Param,
   Patch,
+  Post,
   Query,
   UseGuards,
 } from '@nestjs/common';
@@ -19,12 +20,33 @@ import { UpdateUserRoleDto } from './dto/update-user-role.dto';
 import { UpdateUserStatusDto } from './dto/update-user-status.dto';
 import { UpdateProfileDto } from './dto/update-profile.dto';
 import { UserResponseDto } from './dto/user-response.dto';
+import { CreateUserDto } from './dto/create-user.dto';
+import * as argon2 from 'argon2';
 
 @Controller('users')
 @UseGuards(JwtAccessGuard, RolesGuard)
 export class UsersController {
   constructor(private readonly usersService: UsersService) {}
 
+  @Post('invite')
+  @Roles(UserRole.ADMIN)
+  async inviteUser(
+    @Body() dto: CreateUserDto,
+    @CurrentUser('id') adminId: string,
+  ) {
+    // Hash password
+    const passwordHash = await argon2.hash(dto.password);
+    // Tạo user mới
+    const user = await this.usersService.createUser({
+      email: dto.email,
+      username: dto.username,
+      passwordHash,
+      role: dto.role,
+      phone: dto.phone,
+      createdBy: adminId,
+    });
+    return this.toResponse(user);
+  }
   @Get('me')
   @Roles(UserRole.ADMIN, UserRole.USER)
   async getCurrentUser(@CurrentUser('id') userId: string) {

@@ -15,12 +15,11 @@ import { formatRelative } from "@/lib/time";
 import { toast } from "@/components/ui/toast";
 
 const formSchema = z.object({
+  username: z.string().min(3),
+  password: z.string().min(6),
+  email: z.string().email(),
+  phone: z.string().optional(),
   role: z.enum(["user", "admin"]).default("user"),
-  maxUses: z.preprocess(
-    (value) => (value === "" ? undefined : Number(value)),
-    z.number().min(1).max(100).optional()
-  ),
-  duration: z.string().default("24:00:00"),
 });
 
 type FormValues = z.infer<typeof formSchema>;
@@ -54,24 +53,26 @@ export default function AdminInvitesPage() {
     fetchInvites();
   }, [fetchInvites, filter]);
 
-  const handleCreateInvite = async (values: FormValues) => {
+  const handleCreateUser = async (values: FormValues) => {
     setLocalLoading(true);
     try {
-      // Parse duration to calculate expiresAt
-      const [hoursStr = "0", minutesStr = "0", secondsStr = "0"] = values.duration.split(":");
-      const hours = parseInt(hoursStr) || 0;
-      const minutes = parseInt(minutesStr) || 0;
-      const seconds = parseInt(secondsStr) || 0;
-
-      const expiresAt = new Date();
-      expiresAt.setHours(expiresAt.getHours() + hours);
-      expiresAt.setMinutes(expiresAt.getMinutes() + minutes);
-      expiresAt.setSeconds(expiresAt.getSeconds() + seconds);
-
-      await createInvite(values.role, values.maxUses || 1, expiresAt.toISOString());
+      // Gọi API tạo user trực tiếp
+      const token = localStorage.getItem("accessToken");
+      const res = await fetch("http://localhost:3001/api/users/invite", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+        body: JSON.stringify(values),
+      });
+      if (!res.ok) throw new Error("Failed to create user");
+      const user = await res.json();
+      toast.success(`Tạo tài khoản thành công! Username: ${user.username}`);
       form.reset();
     } catch (error) {
-      console.error("Failed to create invite:", error);
+      toast.error("Tạo tài khoản thất bại!");
+      console.error("Failed to create user:", error);
     } finally {
       setLocalLoading(false);
     }
@@ -112,9 +113,34 @@ export default function AdminInvitesPage() {
         </p>
 
         <form
-          className="mt-6 grid gap-4 md:grid-cols-3"
-          onSubmit={form.handleSubmit(handleCreateInvite)}
+          className="mt-6 grid gap-4 md:grid-cols-2"
+          onSubmit={form.handleSubmit(handleCreateUser)}
         >
+          <label className="flex flex-col gap-2">
+            <span className="text-sm text-zinc-300">Username</span>
+            <Input type="text" {...form.register("username")} placeholder="Username" />
+            {form.formState.errors.username && (
+              <span className="text-xs text-red-400">{form.formState.errors.username.message}</span>
+            )}
+          </label>
+          <label className="flex flex-col gap-2">
+            <span className="text-sm text-zinc-300">Password</span>
+            <Input type="password" {...form.register("password")} placeholder="Password" />
+            {form.formState.errors.password && (
+              <span className="text-xs text-red-400">{form.formState.errors.password.message}</span>
+            )}
+          </label>
+          <label className="flex flex-col gap-2">
+            <span className="text-sm text-zinc-300">Email</span>
+            <Input type="email" {...form.register("email")} placeholder="Email" />
+            {form.formState.errors.email && (
+              <span className="text-xs text-red-400">{form.formState.errors.email.message}</span>
+            )}
+          </label>
+          <label className="flex flex-col gap-2">
+            <span className="text-sm text-zinc-300">Phone</span>
+            <Input type="text" {...form.register("phone")} placeholder="Phone (optional)" />
+          </label>
           <label className="flex flex-col gap-2">
             <span className="text-sm text-zinc-300">Role</span>
             <select
@@ -125,32 +151,9 @@ export default function AdminInvitesPage() {
               <option value="admin">Admin</option>
             </select>
           </label>
-
-          <label className="flex flex-col gap-2">
-            <span className="text-sm text-zinc-300">Max Uses</span>
-            <Input
-              type="number"
-              min={1}
-              max={100}
-              placeholder="1"
-              {...form.register("maxUses")}
-            />
-            {form.formState.errors.maxUses && (
-              <span className="text-xs text-red-400">
-                {form.formState.errors.maxUses.message}
-              </span>
-            )}
-          </label>
-
-          <TimePicker
-            label="Expiration Duration"
-            value={form.watch("duration")}
-            onChange={(value) => form.setValue("duration", value)}
-          />
-
-          <div className="md:col-span-3">
+          <div className="md:col-span-2">
             <Button type="submit" disabled={localLoading || isLoading} className="w-full">
-              {localLoading || isLoading ? "Creating..." : "Create Invite"}
+              {localLoading || isLoading ? "Creating..." : "Create User"}
             </Button>
           </div>
         </form>
