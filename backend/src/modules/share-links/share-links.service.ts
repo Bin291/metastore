@@ -54,6 +54,7 @@ export class ShareLinksService {
     }
 
     const shareLink = this.shareLinkRepository.create({
+      resource: file,
       resourceId: file.id,
       resourceType: file.isFolder
         ? ShareResourceType.FOLDER
@@ -82,6 +83,16 @@ export class ShareLinksService {
     });
 
     return saved;
+  }
+
+  async verifyAndAccess(
+    token: string,
+    password?: string,
+  ): Promise<ShareLink> {
+    const link = await this.getShareLinkByToken(token);
+    await this.verifyPassword(link, password);
+    await this.recordAccess(link);
+    return link;
   }
 
   async listShareLinks(

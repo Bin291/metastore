@@ -1,6 +1,6 @@
 import { api } from '../api-client';
 
-const CHUNK_SIZE = 5 * 1024 * 1024; // 5MB chunks
+const DEFAULT_CHUNK_SIZE = 5 * 1024 * 1024; // 5MB chunks
 const MAX_CONCURRENT_UPLOADS = 3; // Upload 3 chunks at a time
 const MAX_RETRIES = 3;
 
@@ -36,6 +36,7 @@ class ChunkedUploadService {
       visibility?: 'private' | 'public';
       parentId?: string;
       onProgress?: (progress: UploadProgress) => void;
+      chunkSize?: number;
     } = {}
   ): Promise<string> {
     const abortController = new AbortController();
@@ -73,7 +74,10 @@ class ChunkedUploadService {
       });
 
       // Step 2: Upload chunks
-      const chunks = this.createChunks(file);
+      const chunks = this.createChunks(
+        file,
+        options.chunkSize ?? DEFAULT_CHUNK_SIZE,
+      );
       const uploadedParts = await this.uploadChunks(
         chunks,
         uploadUrls,
@@ -204,12 +208,12 @@ class ChunkedUploadService {
   /**
    * Create file chunks
    */
-  private createChunks(file: File): Blob[] {
+  private createChunks(file: File, chunkSize: number = DEFAULT_CHUNK_SIZE): Blob[] {
     const chunks: Blob[] = [];
     let offset = 0;
 
     while (offset < file.size) {
-      const end = Math.min(offset + CHUNK_SIZE, file.size);
+      const end = Math.min(offset + chunkSize, file.size);
       chunks.push(file.slice(offset, end));
       offset = end;
     }

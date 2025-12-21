@@ -7,6 +7,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { FiImage, FiFile, FiVideo, FiMusic, FiFileText, FiLock, FiGlobe, FiGrid, FiList, FiLayout, FiMoreVertical, FiEye, FiDownload, FiTrash2, FiCheckSquare, FiSquare } from "react-icons/fi";
 import { FilePreview } from "@/components/file-preview";
+import { ShareDialog } from "@/components/share-dialog";
 import { FileItem } from "@/types/api";
 
 type ViewMode = "grid" | "list" | "mixed";
@@ -19,6 +20,7 @@ export default function DashboardPage() {
   const [groupMode, setGroupMode] = useState<GroupMode>("grouped");
   const [selectedFiles, setSelectedFiles] = useState<Set<string>>(new Set());
   const [openMenuId, setOpenMenuId] = useState<string | null>(null);
+  const [shareFile, setShareFile] = useState<FileItem | null>(null);
   const queryClient = useQueryClient();
   const [viewMode, setViewMode] = useState<ViewMode>(() => {
     // Load viewMode from localStorage
@@ -39,7 +41,7 @@ export default function DashboardPage() {
   // Load all files to show in gallery
   const filesQuery = useQuery({
     queryKey: ["files", { page: 1, limit: 100 }],
-    queryFn: () => filesService.list({ page: 1, limit: 100 }),
+    queryFn: () => filesService.list({ page: 1, limit: 100, status: "approved" }),
   });
 
   // Filter files by visibility
@@ -144,8 +146,8 @@ export default function DashboardPage() {
   // Download file
   const handleDownload = async (fileId: string) => {
     try {
-      const result = await filesService.downloadUrl(fileId);
-      window.open(result.url, "_blank");
+      const url = filesService.directDownloadUrl(fileId);
+      window.open(url, "_blank");
     } catch (error) {
       console.error("Failed to download:", error);
     }
@@ -239,6 +241,17 @@ export default function DashboardPage() {
                 >
                   <FiEye className="h-4 w-4" />
                   View
+                </button>
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setShareFile(file);
+                    setOpenMenuId(null);
+                  }}
+                  className="w-full px-3 py-2 text-left text-sm text-white hover:bg-zinc-800 flex items-center gap-2"
+                >
+                  <FiGlobe className="h-4 w-4" />
+                  Share
                 </button>
                 <button
                   onClick={(e) => {
@@ -749,6 +762,14 @@ export default function DashboardPage() {
         <FilePreview
           file={previewFile}
           onClose={() => setPreviewFile(null)}
+        />
+      )}
+
+      {shareFile && (
+        <ShareDialog
+          fileId={shareFile.id}
+          fileName={shareFile.name}
+          onClose={() => setShareFile(null)}
         />
       )}
     </div>

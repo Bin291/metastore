@@ -1,6 +1,10 @@
 import { api } from '@/lib/api-client';
 import { FileItem, PaginatedResponse, FileVisibility } from '@/types/api';
 
+const apiBaseUrl =
+  process.env.NEXT_PUBLIC_API_URL?.replace(/\/+$/, '') ??
+  'http://localhost:3001/api';
+
 export interface ListFilesParams {
   page?: number;
   limit?: number;
@@ -82,5 +86,7 @@ export const filesService = {
     api.delete<{ success: boolean }>(`/files/${fileId}`),
   downloadUrl: (fileId: string) =>
     api.get<PresignedUrlResponse>(`/files/${fileId}/download-url`),
+  directDownloadUrl: (fileId: string) =>
+    `${apiBaseUrl}/files/${fileId}/download`,
 };
 

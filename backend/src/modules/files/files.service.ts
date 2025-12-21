@@ -6,7 +6,7 @@ import {
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, type DeepPartial } from 'typeorm';
-import { FileObject, ModerationTask } from '../../entities';
+import { FileObject, ModerationTask, ShareLink } from '../../entities';
 import { StorageService } from '../storage/storage.service';
 import { BucketType } from '../../common/enums/bucket-type.enum';
 import { RequestUploadDto } from './dto/request-upload.dto';
@@ -113,22 +113,6 @@ export class FilesService {
     const file = this.fileRepository.create(filePayload);
     const saved = await this.fileRepository.save(file);
 
-    // No moderation tasks needed anymore - all files auto-approved
-    // Process media files (video/audio) for HLS streaming
-    if (!dto.isFolder && saved.mimeType) {
-      if (saved.mimeType.startsWith('video/')) {
-        // Trigger video processing asynchronously
-        this.processVideoFile(saved.id, userId).catch(err => 
-          console.error(`Failed to process video ${saved.id}:`, err)
-        );
-      } else if (saved.mimeType.startsWith('audio/')) {
-        // Trigger audio processing asynchronously  
-        this.processAudioFile(saved.id, userId).catch(err =>
-          console.error(`Failed to process audio ${saved.id}:`, err)
-        );
-      }
-    }
-
     // Skip old moderation task creation
     if (false && !dto.isFolder && visibility === FileVisibility.PUBLIC && userRole !== UserRole.ADMIN) {
       const moderationTask = this.moderationRepository.create({
@@ -150,19 +134,6 @@ export class FilesService {
         status,
       },
     });
-
-    // Trigger media processing for video/audio files (async, don't wait)
-    if (!dto.isFolder && dto.mimeType) {
-      if (dto.mimeType.startsWith('video/')) {
-        this.processVideoFile(saved.id, userId).catch(err => {
-          console.error(`Failed to process video ${saved.id}:`, err);
-        });
-      } else if (dto.mimeType.startsWith('audio/')) {
-        this.processAudioFile(saved.id, userId).catch(err => {
-          console.error(`Failed to process audio ${saved.id}:`, err);
-        });
-      }
-    }
 
     return saved;
   }
@@ -450,23 +421,28 @@ export class FilesService {
       throw new ForbiddenException('Access denied');
     }
 
-
-    // Block download URL for video/audio files - must use HLS, except owner/admin and HLS not ready
-    if (file.mimeType?.startsWith('video/') || file.mimeType?.startsWith('audio/')) {
-      const metadata = file.metadata as any;
-      const hlsProcessed = metadata?.hls?.processed === true;
-      const isOwner = user && (user.role === UserRole.ADMIN || file.ownerId === user.id);
-      if (hlsProcessed || !isOwner) {
-        throw new BadRequestException(
-          'Cannot download raw media files. Please use HLS streaming.'
-        );
-      }
-      // Allow owner/admin to get raw file if HLS not ready
-    }
-
     return this.storageService.getPresignedDownloadUrl({
       bucketType: file.bucketType,
       key: file.storageKey,
+    });
+  }
+
+  async getDownloadUrlForShare(link: ShareLink): Promise<PresignedUrlResult> {
+    const resource =
+      link.resource ??
+      (await this.fileRepository.findOne({ where: { id: link.resourceId } }));
+
+    if (!resource) {
+      throw new NotFoundException('File not found');
+    }
+
+    if (resource.isFolder) {
+      throw new BadRequestException('Cannot download a folder');
+    }
+
+    return this.storageService.getPresignedDownloadUrl({
+      bucketType: resource.bucketType,
+      key: resource.storageKey,
     });
   }
 
@@ -485,13 +461,6 @@ export class FilesService {
 
     if (file.isFolder) {
       throw new ForbiddenException('Cannot download a folder');
-    }
-
-    // Block download for video/audio files - must use HLS
-    if (file.mimeType?.startsWith('video/') || file.mimeType?.startsWith('audio/')) {
-      throw new BadRequestException(
-        'Cannot download raw media files. Please use HLS streaming.'
-      );
     }
 
     const { stream, contentType } = await this.storageService.downloadFile({
@@ -928,9 +897,6 @@ export class FilesService {
       })),
     });
 
-    // Update file status and mark as processing if media file
-    const isMediaFile = file.mimeType?.startsWith('video/') || file.mimeType?.startsWith('audio/');
-    
     let updatedFile = await this.fileRepository.save({
       ...file,
       status: FileStatus.APPROVED, // Auto-approve
@@ -940,61 +906,10 @@ export class FilesService {
         uploading: false,
         uploadCompletedAt: new Date().toISOString(),
         uploadId: undefined,
-        processing: isMediaFile, // Mark as processing if media
-        processingStartedAt: isMediaFile ? new Date().toISOString() : undefined,
+        processing: false,
+        processingStartedAt: undefined,
       },
     });
-
-    // Process media files ASYNCHRONOUSLY (don't wait)
-    if (file.mimeType?.startsWith('video/')) {
-      // Process in background
-      this.processVideoFile(updatedFile.id, userId)
-        .then(async () => {
-          // Update success status
-          await this.fileRepository.update(updatedFile.id, {
-            metadata: {
-              ...updatedFile.metadata,
-              processing: false,
-              processingCompletedAt: new Date().toISOString(),
-            },
-          });
-          console.log(`Video processing completed for ${updatedFile.id}`);
-        })
-        .catch(async (err) => {
-          console.error(`Failed to process video ${updatedFile.id}:`, err);
-          // Mark processing as failed
-          await this.fileRepository.update(updatedFile.id, {
-            metadata: {
-              ...updatedFile.metadata,
-              processing: false,
-              processingError: err.message,
-            },
-          });
-        });
-    } else if (file.mimeType?.startsWith('audio/')) {
-      // Process in background
-      this.processAudioFile(updatedFile.id, userId)
-        .then(async () => {
-          await this.fileRepository.update(updatedFile.id, {
-            metadata: {
-              ...updatedFile.metadata,
-              processing: false,
-              processingCompletedAt: new Date().toISOString(),
-            },
-          });
-          console.log(`Audio processing completed for ${updatedFile.id}`);
-        })
-        .catch(async (err) => {
-          console.error(`Failed to process audio ${updatedFile.id}:`, err);
-          await this.fileRepository.update(updatedFile.id, {
-            metadata: {
-              ...updatedFile.metadata,
-              processing: false,
-              processingError: err.message,
-            },
-          });
-        });
-    }
 
     // Reload file with updated metadata
     const reloadedFile = await this.fileRepository.findOne({ where: { id: updatedFile.id } });

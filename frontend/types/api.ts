@@ -40,6 +40,15 @@ export interface FileItem {
 export type SharePermission = 'view' | 'full';
 export type ShareResourceType = 'file' | 'folder';
 
+export interface ShareResource {
+  id: string;
+  name: string;
+  mimeType?: string | null;
+  isFolder: boolean;
+  size: string;
+  visibility: FileVisibility;
+}
+
 export interface ShareLink {
   id: string;
   token: string;
@@ -51,6 +60,7 @@ export interface ShareLink {
   lastAccessedAt?: string | null;
   accessCount: number;
   createdAt: string;
+  resource?: ShareResource;
 }
 
 export interface PaginatedResponse<T> {

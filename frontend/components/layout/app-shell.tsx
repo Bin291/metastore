@@ -63,7 +63,6 @@ export function AppShell({ children }: AppShellProps) {
       [
         { label: "Overview", href: "/dashboard" },
         { label: "Files", href: "/files" },
-        { label: "Share Links", href: "/share-links" },
         ...(user?.role === "admin"
           ? [
               { label: "Pending Review", href: "/admin/pending" },
@@ -99,56 +98,35 @@ export function AppShell({ children }: AppShellProps) {
   }
 
   return (
-    <div className="flex h-screen bg-zinc-950 text-zinc-100 overflow-hidden">
-      <aside className="hidden w-64 flex-col border-r border-zinc-800 bg-zinc-950/40 p-6 md:flex flex-shrink-0">
-        <div className="mb-8">
-          <h1 className="text-xl font-semibold text-white">MetaStore</h1>
-          <p className="mt-1 text-xs text-zinc-500">
-            Secure file management platform.
-          </p>
-        </div>
-        <nav className="flex flex-1 flex-col gap-1">
-          {navItems.map((item) => (
-            <Link
-              key={item.href}
-              href={item.href}
-              className={cn(
-                "rounded-lg px-3 py-2 text-sm font-medium transition-colors",
-                pathname === item.href
-                  ? "bg-zinc-800 text-white"
-                  : "text-zinc-400 hover:bg-zinc-900 hover:text-white"
-              )}
-            >
-              {item.label}
+    <div className="min-h-screen bg-zinc-950 text-zinc-100">
+      <header className="sticky top-0 z-30 border-b border-zinc-800 bg-zinc-950/80 backdrop-blur">
+        <div className="mx-auto flex max-w-7xl items-center justify-between px-4 py-4">
+          <div className="flex items-center gap-4">
+            <Link href="/dashboard" className="text-lg font-semibold text-white">
+              MetaStore
             </Link>
-          ))}
-        </nav>
-        <div className="mt-6 rounded-lg border border-zinc-800 bg-zinc-900/60 p-4 text-xs text-zinc-400">
-          <p className="font-semibold text-zinc-200">Logged in as</p>
-          <p>{user.username}</p>
-          <p className="capitalize">{user.role}</p>
-        </div>
-        <Button
-          variant="outline"
-          className="mt-4"
-          onClick={handleLogout}
-          disabled={logoutMutation.isPending}
-        >
-          Logout
-        </Button>
-      </aside>
-      <div className="flex flex-1 flex-col overflow-hidden">
-        <header className="flex-shrink-0 flex items-center justify-between border-b border-zinc-800 bg-zinc-950/80 px-6 py-4 shadow-sm">
-          <div>
-            <h2 className="text-lg font-semibold text-white">
-              Welcome back, {user.username}
-            </h2>
-            <p className="text-sm text-zinc-500">
-              Manage your storage and share files securely.
-            </p>
+            <nav className="hidden gap-1 md:flex">
+              {navItems.map((item) => (
+                <Link
+                  key={item.href}
+                  href={item.href}
+                  className={cn(
+                    "rounded-md px-3 py-2 text-sm font-medium transition-colors",
+                    pathname === item.href
+                      ? "bg-zinc-800 text-white"
+                      : "text-zinc-400 hover:bg-zinc-900 hover:text-white"
+                  )}
+                >
+                  {item.label}
+                </Link>
+              ))}
+            </nav>
           </div>
           <div className="flex items-center gap-4">
-            {/* Notifications Icon */}
+            <div className="hidden text-right text-xs text-zinc-400 sm:block">
+              <p className="font-semibold text-zinc-200">{user.username}</p>
+              <p className="capitalize">{user.role}</p>
+            </div>
             <div className="relative">
               <button
                 onClick={() => setShowNotifications(!showNotifications)}
@@ -160,7 +138,6 @@ export function AppShell({ children }: AppShellProps) {
                 )}
               </button>
 
-              {/* Notifications Dropdown */}
               {showNotifications && (
                 <div className="absolute right-0 mt-2 w-80 max-h-96 bg-zinc-900 border border-zinc-800 rounded-lg shadow-lg z-50 overflow-y-auto">
                   <div className="p-4 border-b border-zinc-800">
@@ -193,23 +170,35 @@ export function AppShell({ children }: AppShellProps) {
                 </div>
               )}
             </div>
-
             <Button
               variant="outline"
               onClick={handleLogout}
               disabled={logoutMutation.isPending}
-              className="md:hidden"
             >
               Logout
             </Button>
           </div>
-        </header>
-        <main className="flex-1 overflow-y-auto bg-zinc-950">
-          <div className="p-6">
-            {children}
-          </div>
-        </main>
-      </div>
+        </div>
+        <nav className="flex gap-2 px-4 pb-3 md:hidden">
+          {navItems.map((item) => (
+            <Link
+              key={item.href}
+              href={item.href}
+              className={cn(
+                "rounded-md px-3 py-2 text-sm font-medium transition-colors",
+                pathname === item.href
+                  ? "bg-zinc-800 text-white"
+                  : "text-zinc-400 hover:bg-zinc-900 hover:text-white"
+              )}
+            >
+              {item.label}
+            </Link>
+          ))}
+        </nav>
+      </header>
+      <main className="mx-auto max-w-7xl px-4 py-6">
+        {children}
+      </main>
     </div>
   );
 }

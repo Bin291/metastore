@@ -17,6 +17,7 @@ interface FilePreviewProps {
 
 export function FilePreview({ file, onClose }: FilePreviewProps) {
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+  const [fallbackUrl, setFallbackUrl] = useState<string | null>(null);
   const [previewError, setPreviewError] = useState<string | null>(null);
   const [zoom, setZoom] = useState(1);
 
@@ -50,6 +51,11 @@ export function FilePreview({ file, onClose }: FilePreviewProps) {
         // Use HLS streaming URL
         const hlsUrl = `/api/files/${file.id}/hls/${hlsMetadata.masterPlaylist}`;
         setPreviewUrl(hlsUrl);
+        // Pre-fetch fallback original URL for recovery
+        filesService
+          .downloadUrl(file.id)
+          .then((result) => setFallbackUrl(result.url))
+          .catch(() => {});
         return;
       } else {
         // Fallback: play original file while processing
@@ -169,7 +175,7 @@ export function FilePreview({ file, onClose }: FilePreviewProps) {
             <div className="w-full h-full flex items-center justify-center p-4">
               <div className="w-full" style={{ maxWidth: '1280px', aspectRatio: '16/9' }}>
                 {previewUrl.endsWith('.m3u8') || previewUrl.includes('/hls/') ? (
-                  <CustomVideoPlayer src={previewUrl} className="w-full h-full" />
+                  <CustomVideoPlayer src={previewUrl} fallbackSrc={fallbackUrl ?? undefined} className="w-full h-full" />
                 ) : (
                   <video
                     src={previewUrl}

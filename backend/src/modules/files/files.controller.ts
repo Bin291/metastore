@@ -133,14 +133,7 @@ export class FilesController {
     @CurrentUser() user: { id: string; role: UserRole },
   ): Promise<StreamableFile> {
     const { file, stream, contentType } = await this.filesService.downloadFile(fileId, user);
-    
-    // Block downloading raw video/audio files - must use HLS instead
-    if (file.mimeType?.startsWith('video/') || file.mimeType?.startsWith('audio/')) {
-      throw new BadRequestException(
-        'Cannot download raw media files. Please use HLS streaming or wait for processing to complete.'
-      );
-    }
-    
+
     return new StreamableFile(stream, {
       type: contentType,
       disposition: `attachment; filename="${encodeURIComponent(file.name)}"`,

@@ -15,8 +15,8 @@ import { formatRelative } from "@/lib/time";
 import { toast } from "@/components/ui/toast";
 
 const formSchema = z.object({
-  username: z.string().min(3),
-  password: z.string().min(6),
+  username: z.string().min(3).optional(),
+  password: z.string().min(6).optional(),
   email: z.string().email(),
   phone: z.string().optional(),
   role: z.enum(["user", "admin"]).default("user"),
@@ -44,8 +44,6 @@ export default function AdminInvitesPage() {
     resolver: zodResolver(formSchema),
     defaultValues: {
       role: "user",
-      maxUses: 1,
-      duration: "00:05:00",
     },
   });
 
@@ -56,23 +54,15 @@ export default function AdminInvitesPage() {
   const handleCreateUser = async (values: FormValues) => {
     setLocalLoading(true);
     try {
-      // Gọi API tạo user trực tiếp
-      const token = localStorage.getItem("accessToken");
-      const res = await fetch("http://localhost:3001/api/users/invite", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          ...(token ? { Authorization: `Bearer ${token}` } : {}),
-        },
-        body: JSON.stringify(values),
-      });
-      if (!res.ok) throw new Error("Failed to create user");
-      const user = await res.json();
-      toast.success(`Tạo tài khoản thành công! Username: ${user.username}`);
-      form.reset();
+      // Tạo invite thay vì gọi API không tồn tại
+      const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(); // 24h
+      const invite = await createInvite(values.role, 1, expiresAt);
+      toast.success("Tạo link mời thành công");
+      setInviteLink(`${window.location.origin}/invites/accept/${invite.token}`);
+      form.reset({ role: "user" });
     } catch (error) {
       toast.error("Tạo tài khoản thất bại!");
-      console.error("Failed to create user:", error);
+      console.error("Failed to create invite:", error);
     } finally {
       setLocalLoading(false);
     }

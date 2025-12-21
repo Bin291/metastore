@@ -6,12 +6,14 @@ import Hls from "hls.js";
 
 interface CustomVideoPlayerProps {
   src: string;
+  fallbackSrc?: string;
   className?: string;
 }
 
-export function CustomVideoPlayer({ src, className = "" }: CustomVideoPlayerProps) {
+export function CustomVideoPlayer({ src, fallbackSrc, className = "" }: CustomVideoPlayerProps) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const hlsRef = useRef<Hls | null>(null);
+  const [currentSrc, setCurrentSrc] = useState(src);
   const [isPlaying, setIsPlaying] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(0);
@@ -25,17 +27,23 @@ export function CustomVideoPlayer({ src, className = "" }: CustomVideoPlayerProp
   const containerRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
+    setCurrentSrc(src);
+  }, [src]);
+
+  useEffect(() => {
     const video = videoRef.current;
     if (!video) return;
 
     // Check if this is an HLS stream
-    const isHLS = src.includes('/hls/') || src.endsWith('.m3u8');
+    const isHLS = currentSrc.includes('/hls/') || currentSrc.endsWith('.m3u8');
 
     if (isHLS && Hls.isSupported()) {
       // Use HLS.js for adaptive streaming with optimized settings
       const hls = new Hls({
         enableWorker: true,
         lowLatencyMode: false,
+        autoStartLoad: true,
+        startPosition: -1,
         
         // Buffer settings - tối ưu cho load nhanh
         maxBufferLength: 10, // Chỉ buffer 10 giây (thay vì 30s)
@@ -57,12 +65,24 @@ export function CustomVideoPlayer({ src, className = "" }: CustomVideoPlayerProp
         // Bandwidth detection
         testBandwidth: true,
         abrEwmaDefaultEstimate: 500000, // 500kbps default
+
+        // Ensure cookies/auth are sent to protected HLS endpoints
+        xhrSetup: (xhr) => {
+          xhr.withCredentials = true;
+        },
+        fetchSetup: (context) => {
+          const init: RequestInit = {
+            ...(context as any).options,
+            credentials: "include",
+          };
+          return new Request(context.url, init);
+        },
         
         // Debug (bật để xem segment loading)
         debug: false, // Set true để debug
       });
 
-      hls.loadSource(src);
+      hls.loadSource(currentSrc);
       hls.attachMedia(video);
 
       // Log segment loading để debug
@@ -95,15 +115,28 @@ export function CustomVideoPlayer({ src, className = "" }: CustomVideoPlayerProp
           switch (data.type) {
             case Hls.ErrorTypes.NETWORK_ERROR:
               console.log('Fatal network error, trying to recover');
-              hls.startLoad();
+              if (fallbackSrc) {
+                hls.destroy();
+                setCurrentSrc(fallbackSrc);
+              } else {
+                hls.startLoad();
+              }
               break;
             case Hls.ErrorTypes.MEDIA_ERROR:
               console.log('Fatal media error, trying to recover');
-              hls.recoverMediaError();
+              if (fallbackSrc) {
+                hls.destroy();
+                setCurrentSrc(fallbackSrc);
+              } else {
+                hls.recoverMediaError();
+              }
               break;
             default:
               console.log('Fatal error, cannot recover');
               hls.destroy();
+              if (fallbackSrc) {
+                setCurrentSrc(fallbackSrc);
+              }
               break;
           }
         }
@@ -116,10 +149,10 @@ export function CustomVideoPlayer({ src, className = "" }: CustomVideoPlayerProp
       };
     } else if (isHLS && video.canPlayType('application/vnd.apple.mpegurl')) {
       // Native HLS support (Safari)
-      video.src = src;
+      video.src = currentSrc;
     } else {
       // Regular video file
-      video.src = src;
+      video.src = currentSrc;
     }
 
     const updateTime = () => setCurrentTime(video.currentTime);
@@ -135,7 +168,7 @@ export function CustomVideoPlayer({ src, className = "" }: CustomVideoPlayerProp
       video.removeEventListener("loadedmetadata", updateDuration);
       video.removeEventListener("ended", handleEnded);
     };
-  }, [src]);
+  }, [currentSrc, fallbackSrc]);
 
   const togglePlay = () => {
     const video = videoRef.current;

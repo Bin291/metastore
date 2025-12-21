@@ -20,10 +20,14 @@ import { ShareLinkResponseDto } from './dto/share-link-response.dto';
 import { ListShareLinksQueryDto } from './dto/list-share-links-query.dto';
 import { ToggleShareLinkDto } from './dto/toggle-share-link.dto';
 import { AccessShareLinkDto } from './dto/access-share-link.dto';
+import { FilesService } from '../files/files.service';
 
 @Controller('share-links')
 export class ShareLinksController {
-  constructor(private readonly shareLinksService: ShareLinksService) {}
+  constructor(
+    private readonly shareLinksService: ShareLinksService,
+    private readonly filesService: FilesService,
+  ) {}
 
   @Post()
   @UseGuards(JwtAccessGuard, RolesGuard)
@@ -86,11 +90,19 @@ export class ShareLinksController {
     @Param('token') token: string,
     @Body() dto: AccessShareLinkDto,
   ) {
-    const link = await this.shareLinksService.getShareLinkByToken(token);
-    await this.shareLinksService.verifyPassword(link, dto.password);
-    await this.shareLinksService.recordAccess(link);
+    const link = await this.shareLinksService.verifyAndAccess(token, dto.password);
 
     return this.toResponse(link);
+  }
+
+  @Post('token/:token/download-url')
+  async downloadSharedResource(
+    @Param('token') token: string,
+    @Body() dto: AccessShareLinkDto,
+  ) {
+    const link = await this.shareLinksService.verifyAndAccess(token, dto.password);
+    const url = await this.filesService.getDownloadUrlForShare(link);
+    return url;
   }
 
   private toResponse(link: any) {

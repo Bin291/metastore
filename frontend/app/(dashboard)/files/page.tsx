@@ -24,6 +24,7 @@ import {
   FiCheckCircle,
 } from "react-icons/fi";
 import { filesService } from "@/lib/services/files";
+import { chunkedUploadService } from "@/lib/services/chunked-upload";
 import { FileItem } from "@/types/api";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -34,6 +35,7 @@ import { formatFileSize } from "@/lib/utils/format";
 import { FilePreview } from "@/components/file-preview";
 import { Pagination } from "@/components/ui/pagination";
 import { LoadingSpinner } from "@/components/ui/loading";
+import { ShareDialog } from "@/components/share-dialog";
 
 // Helper function to get image dimensions
 const getImageDimensions = (file: File): Promise<{ width: number; height: number }> => {
@@ -68,9 +70,20 @@ export default function FilesPage() {
   const [uploadQueue, setUploadQueue] = useState<File[]>([]);
   const [isUploading, setIsUploading] = useState(false);
   const [uploadVisibility, setUploadVisibility] = useState<"private" | "public">("private");
+  const [imagePreviews, setImagePreviews] = useState<Record<string, string>>({});
+  const [shareFile, setShareFile] = useState<FileItem | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const folderInputRef = useRef<HTMLInputElement>(null);
   const limit = 20;
+
+  // Adaptive chunk size: more, smaller chunks as files get larger
+  function computeAdaptiveChunkSize(fileSize: number) {
+    const minChunk = 2 * 1024 * 1024; // 2MB
+    const maxChunk = 8 * 1024 * 1024; // 8MB
+    const targetChunks = 100;
+    const rawSize = Math.max(minChunk, Math.min(maxChunk, Math.floor(fileSize / targetChunks)));
+    return rawSize;
+  }
 
   const filesQuery = useQuery({
     queryKey: ["files", { page: currentPage, limit, search, parentId: currentFolderId }],
@@ -80,13 +93,14 @@ export default function FilesPage() {
         limit,
         search: search || undefined,
         parentId: currentFolderId !== null ? currentFolderId : undefined,
+        status: "approved",
       }),
   });
 
   const uploadFileMutation = useMutation({
     mutationFn: async (file: File) => {
-      const fileId = Math.random().toString(36);
-      setUploadProgress((prev) => ({ ...prev, [fileId]: 0 }));
+      const tempId = Math.random().toString(36);
+      setUploadProgress((prev) => ({ ...prev, [tempId]: 0 }));
 
       try {
         const path = file.name;
@@ -104,6 +118,36 @@ export default function FilesPage() {
             console.warn('Failed to get image dimensions:', error);
           }
         }
+
+        const isMedia = file.type.startsWith("video/") || file.type.startsWith("audio/");
+        const isLargeMedia = isMedia && file.size >= 20 * 1024 * 1024; // 20MB+
+
+        if (isLargeMedia) {
+          const chunkSize = computeAdaptiveChunkSize(file.size);
+          await chunkedUploadService.uploadFile(file, {
+            path,
+            visibility: uploadVisibility,
+            parentId: currentFolderId || undefined,
+            chunkSize,
+            onProgress: (progress) => {
+              setUploadProgress((prev) => ({
+                ...prev,
+                [tempId]: Math.round(progress.percentage),
+              }));
+            },
+          });
+
+          setUploadProgress((prev) => ({ ...prev, [tempId]: 100 }));
+          setTimeout(() => {
+            setUploadProgress((prev) => {
+              const newProgress = { ...prev };
+              delete newProgress[tempId];
+              return newProgress;
+            });
+          }, 500);
+
+          return;
+        }
         
         const presigned = await filesService.requestUploadUrl({
           path,
@@ -118,7 +162,7 @@ export default function FilesPage() {
           throw new Error("Unable to create presigned URL");
         }
 
-        setUploadProgress((prev) => ({ ...prev, [fileId]: 30 }));
+        setUploadProgress((prev) => ({ ...prev, [tempId]: 30 }));
 
         const uploadResponse = await fetch(presigned.url, {
           method: "PUT",
@@ -132,7 +176,7 @@ export default function FilesPage() {
           throw new Error("Failed to upload file to storage");
         }
 
-        setUploadProgress((prev) => ({ ...prev, [fileId]: 70 }));
+        setUploadProgress((prev) => ({ ...prev, [tempId]: 70 }));
 
         const result = await filesService.registerFile({
           name: file.name,
@@ -144,11 +188,11 @@ export default function FilesPage() {
           visibility: uploadVisibility,
         });
 
-        setUploadProgress((prev) => ({ ...prev, [fileId]: 100 }));
+        setUploadProgress((prev) => ({ ...prev, [tempId]: 100 }));
         setTimeout(() => {
           setUploadProgress((prev) => {
             const newProgress = { ...prev };
-            delete newProgress[fileId];
+            delete newProgress[tempId];
             return newProgress;
           });
         }, 500);
@@ -157,7 +201,7 @@ export default function FilesPage() {
       } catch (error) {
         setUploadProgress((prev) => {
           const newProgress = { ...prev };
-          delete newProgress[fileId];
+          delete newProgress[tempId];
           return newProgress;
         });
         throw error;
@@ -167,6 +211,7 @@ export default function FilesPage() {
       queryClient.invalidateQueries({ queryKey: ["files"] });
     },
   });
+
 
   // Helper function to create folder structure and return folder map
   const createFolderStructure = async (
@@ -356,10 +401,6 @@ export default function FilesPage() {
     },
   });
 
-  const downloadMutation = useMutation({
-    mutationFn: (fileId: string) => filesService.downloadUrl(fileId),
-  });
-
   const handleFileChange = async (
     event: React.ChangeEvent<HTMLInputElement>
   ) => {
@@ -445,6 +486,23 @@ export default function FilesPage() {
   const visibleItems = files.filter((f) => f.parentId === currentFolderId);
   const folders = visibleItems.filter((f) => f.isFolder);
   const fileItems = visibleItems.filter((f) => !f.isFolder);
+
+  // Prefetch previews for images only (avoid heavy video loads)
+  useEffect(() => {
+    fileItems.forEach(async (file) => {
+      if (file.isFolder) return;
+      const isImage = file.mimeType?.startsWith("image/");
+      if (!isImage) return;
+      if (imagePreviews[file.id]) return;
+
+      try {
+        const result = await filesService.downloadUrl(file.id);
+        setImagePreviews((prev) => ({ ...prev, [file.id]: result.url }));
+      } catch (error) {
+        console.error("Failed to load preview:", error);
+      }
+    });
+  }, [fileItems, imagePreviews]);
 
   return (
     <div className="max-w-7xl mx-auto space-y-6 px-4">
@@ -685,232 +743,184 @@ export default function FilesPage() {
         )}
       </Card>
 
-      {/* Files Table */}
-      <div className="overflow-hidden rounded-2xl border border-zinc-800">
+      {/* Files Grid */}
+      <div className="rounded-2xl border border-zinc-800 bg-zinc-950 p-4">
         {filesQuery.isLoading ? (
-          <div className="flex items-center justify-center border-b border-zinc-800 bg-zinc-950 p-8">
+          <div className="flex items-center justify-center py-8">
             <LoadingSpinner />
           </div>
         ) : files.length === 0 ? (
-          <div className="bg-zinc-950 p-8 text-center">
-            <p className="text-zinc-500">
-              No files yet. Upload files or create folders to get started.
-            </p>
+          <div className="py-8 text-center text-zinc-500">
+            No files yet. Upload files or create folders to get started.
           </div>
         ) : (
-          <table className="min-w-full divide-y divide-zinc-800">
-            <thead className="bg-zinc-900">
-              <tr>
-                <th className="px-4 py-4 text-left text-xs font-semibold uppercase tracking-wider text-zinc-400" style={{ width: '40%' }}>
-                  Name
-                </th>
-                <th className="hidden px-4 py-4 text-left text-xs font-semibold uppercase tracking-wider text-zinc-400 sm:table-cell" style={{ width: '10%' }}>
-                  Type
-                </th>
-                <th className="hidden px-4 py-4 text-left text-xs font-semibold uppercase tracking-wider text-zinc-400 md:table-cell" style={{ width: '10%' }}>
-                  Size
-                </th>
-                <th className="hidden px-4 py-4 text-left text-xs font-semibold uppercase tracking-wider text-zinc-400 lg:table-cell" style={{ width: '12%' }}>
-                  Visibility
-                </th>
-                <th className="hidden px-4 py-4 text-left text-xs font-semibold uppercase tracking-wider text-zinc-400 xl:table-cell" style={{ width: '10%' }}>
-                  Status
-                </th>
-                <th className="hidden px-4 py-4 text-left text-xs font-semibold uppercase tracking-wider text-zinc-400 xl:table-cell" style={{ width: '12%' }}>
-                  Created
-                </th>
-                <th className="px-4 py-4 text-right text-xs font-semibold uppercase tracking-wider text-zinc-400">
-                  Actions
-                </th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-zinc-900 bg-zinc-950">
-              {/* Folders */}
-              {folders.map((folder) => (
-                <tr
-                  key={folder.id}
-                  className="transition-colors hover:bg-zinc-900/50"
-                >
-                  <td className="px-4 py-4" style={{ maxWidth: '0' }}>
-                    <button
-                      onClick={() => setCurrentFolderId(folder.id)}
-                      className="flex items-center gap-3 font-medium text-indigo-400 hover:text-indigo-300 w-full"
-                    >
-                      <FiFolder className="h-5 w-5 flex-shrink-0" />
-                      <span className="truncate">{folder.name}</span>
-                    </button>
-                  </td>
-                  <td className="hidden px-4 py-4 text-sm text-zinc-400 sm:table-cell">
-                    Folder
-                  </td>
-                  <td className="hidden px-4 py-4 text-sm text-zinc-400 md:table-cell">
-                    -
-                  </td>
-                  <td className="hidden px-4 py-4 lg:table-cell">
-                    <Badge
-                      variant={folder.visibility === "public" ? "info" : "default"}
-                      className="text-xs flex items-center gap-1 w-fit"
-                    >
-                      {folder.visibility === "public" ? (
-                        <><FiGlobe className="h-3 w-3" /> Public</>
-                      ) : (
-                        <><FiLock className="h-3 w-3" /> Private</>
-                      )}
-                    </Badge>
-                  </td>
-                  <td className="hidden px-4 py-4 xl:table-cell">
-                    <Badge
-                      variant={
-                        folder.status === "approved"
-                          ? "success"
-                          : folder.status === "pending"
-                          ? "warning"
-                          : "danger"
-                      }
-                      className="text-xs"
-                    >
-                      {folder.status}
-                    </Badge>
-                  </td>
-                  <td className="hidden px-4 py-4 text-sm text-zinc-400 xl:table-cell">
-                    {formatRelative(folder.createdAt)}
-                  </td>
-                  <td className="px-4 py-4">
-                    <div className="flex items-center justify-end gap-2">
-                      <Button
-                        variant="ghost"
-                        className="text-red-400 hover:bg-red-950/30 hover:text-red-300"
-                        onClick={() => {
-                          if (confirm("Delete this folder?")) {
-                            deleteMutation.mutate(folder.id);
-                          }
-                        }}
-                        disabled={deleteMutation.isPending}
-                        title="Delete"
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+            {folders.map((folder) => (
+              <div
+                key={folder.id}
+                className="group relative overflow-hidden rounded-xl border border-zinc-800 bg-zinc-900/60 p-4 transition-all hover:border-indigo-500/70 hover:shadow-lg hover:shadow-indigo-500/10"
+              >
+                <div className="flex items-start gap-3">
+                  <button
+                    onClick={() => setCurrentFolderId(folder.id)}
+                    className="flex items-center justify-center rounded-lg bg-indigo-500/10 p-2 text-indigo-300 transition-colors hover:bg-indigo-500/20"
+                  >
+                    <FiFolder className="h-6 w-6" />
+                  </button>
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-start justify-between gap-2">
+                      <button
+                        className="truncate text-sm font-semibold text-white hover:text-indigo-300"
+                        onClick={() => setCurrentFolderId(folder.id)}
                       >
-                        <FiTrash2 className="h-5 w-5" />
-                      </Button>
+                        {folder.name}
+                      </button>
+                      <Badge
+                        variant={folder.visibility === "public" ? "info" : "default"}
+                        className="text-[10px] px-2 py-0.5"
+                      >
+                        {folder.visibility === "public" ? "Public" : "Private"}
+                      </Badge>
                     </div>
-                  </td>
-                </tr>
-              ))}
+                    <p className="mt-1 truncate text-xs text-zinc-500">{formatRelative(folder.createdAt)}</p>
+                  </div>
+                </div>
 
-              {/* Files */}
-              {fileItems.map((file) => (
-                <tr
+                <div className="mt-4 flex justify-end gap-2 opacity-0 transition-opacity group-hover:opacity-100">
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="h-8 w-8 text-red-400 hover:bg-red-950/40 hover:text-red-200 p-0"
+                      onClick={() => {
+                        if (confirm("Delete this folder?")) {
+                          deleteMutation.mutate(folder.id);
+                        }
+                      }}
+                      disabled={deleteMutation.isPending}
+                      title="Delete"
+                    >
+                      <FiTrash2 className="h-4 w-4" />
+                    </Button>
+                </div>
+              </div>
+            ))}
+
+            {fileItems.map((file) => {
+              const icon = file.mimeType?.includes("image")
+                ? <FiImage className="h-6 w-6 text-blue-400" />
+                : file.mimeType?.includes("video")
+                  ? <FiVideo className="h-6 w-6 text-red-400" />
+                  : file.mimeType?.includes("audio")
+                    ? <FiMusic className="h-6 w-6 text-purple-400" />
+                    : file.mimeType?.includes("pdf")
+                      ? <FiFile className="h-6 w-6 text-orange-400" />
+                      : file.mimeType?.includes("text")
+                        ? <FiFileText className="h-6 w-6 text-green-400" />
+                        : file.mimeType?.includes("zip")
+                          ? <FiPackage className="h-6 w-6 text-yellow-400" />
+                          : <FiFile className="h-6 w-6 text-zinc-400" />;
+
+              return (
+                <div
                   key={file.id}
-                  className="transition-colors hover:bg-zinc-900/50"
+                  className="group relative overflow-hidden rounded-xl border border-zinc-800 bg-zinc-900/60 p-4 transition-all hover:border-indigo-500/70 hover:shadow-lg hover:shadow-indigo-500/10"
                 >
-                  <td className="px-4 py-4" style={{ maxWidth: '0' }}>
-                    <div className="flex items-center gap-3">
-                      <span className="text-xl flex-shrink-0">
-                        {file.mimeType?.includes("image") ? (
-                          <FiImage className="h-5 w-5 text-blue-400" />
-                        ) : file.mimeType?.includes("video") ? (
-                          <FiVideo className="h-5 w-5 text-red-400" />
-                        ) : file.mimeType?.includes("audio") ? (
-                          <FiMusic className="h-5 w-5 text-purple-400" />
-                        ) : file.mimeType?.includes("pdf") ? (
-                          <FiFile className="h-5 w-5 text-orange-400" />
-                        ) : file.mimeType?.includes("text") ? (
-                          <FiFileText className="h-5 w-5 text-green-400" />
-                        ) : file.mimeType?.includes("zip") ? (
-                          <FiPackage className="h-5 w-5 text-yellow-400" />
-                        ) : (
-                          <FiFile className="h-5 w-5 text-zinc-400" />
-                        )}
-                      </span>
-                      <div className="min-w-0">
-                        <p className="truncate font-medium text-white">
-                          {file.name}
-                        </p>
-                        <p className="truncate text-xs text-zinc-500">
-                          {file.path}
-                        </p>
+                  <div className="mb-3 overflow-hidden rounded-lg bg-zinc-800">
+                    {imagePreviews[file.id] ? (
+                      <img
+                        src={imagePreviews[file.id]}
+                        alt={file.name}
+                        className="h-32 w-full object-cover"
+                      />
+                    ) : (
+                      <div className="flex h-32 items-center justify-center">
+                        {icon}
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="flex items-start gap-3">
+                    <div className="flex h-12 w-12 flex-shrink-0 items-center justify-center rounded-lg bg-zinc-800">
+                      {icon}
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate text-sm font-semibold text-white">{file.name}</p>
+                      <p className="truncate text-xs text-zinc-500">{file.path}</p>
+                      <div className="mt-2 flex flex-wrap items-center gap-2 text-[11px] text-zinc-400">
+                        <Badge
+                          variant={file.visibility === "public" ? "info" : "default"}
+                          className="text-[10px] px-2 py-0.5"
+                        >
+                          {file.visibility === "public" ? "Public" : "Private"}
+                        </Badge>
+                        <Badge
+                          variant={
+                            file.status === "approved"
+                              ? "success"
+                              : file.status === "pending"
+                              ? "warning"
+                              : "danger"
+                          }
+                          className="text-[10px] px-2 py-0.5"
+                        >
+                          {file.status}
+                        </Badge>
+                        <span>· {formatFileSize(file.size)}</span>
+                        <span>· {formatRelative(file.createdAt)}</span>
                       </div>
                     </div>
-                  </td>
-                  <td className="hidden px-4 py-4 text-sm text-zinc-400 sm:table-cell">
-                    {file.mimeType?.split("/")[1] || "file"}
-                  </td>
-                  <td className="hidden px-4 py-4 text-sm text-zinc-400 md:table-cell">
-                    {formatFileSize(file.size)}
-                  </td>
-                  <td className="hidden px-4 py-4 lg:table-cell">
-                    <Badge
-                      variant={file.visibility === "public" ? "info" : "default"}
-                      className="text-xs flex items-center gap-1 w-fit"
+                  </div>
+
+                  <div className="mt-4 flex justify-end gap-2 opacity-0 transition-opacity group-hover:opacity-100">
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="h-8 w-8 text-blue-400 hover:bg-blue-950/40 hover:text-blue-200 p-0"
+                      onClick={() => setPreviewFile(file)}
+                      title="Preview"
                     >
-                      {file.visibility === "public" ? (
-                        <><FiGlobe className="h-3 w-3" /> Public</>
-                      ) : (
-                        <><FiLock className="h-3 w-3" /> Private</>
-                      )}
-                    </Badge>
-                  </td>
-                  <td className="hidden px-4 py-4 xl:table-cell">
-                    <Badge
-                      variant={
-                        file.status === "approved"
-                          ? "success"
-                          : file.status === "pending"
-                          ? "warning"
-                          : "danger"
-                      }
-                      className="text-xs"
+                      <FiEye className="h-4 w-4" />
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="h-8 w-8 text-indigo-400 hover:bg-indigo-950/40 hover:text-indigo-200 p-0"
+                      onClick={() => setShareFile(file)}
+                      title="Share"
                     >
-                      {file.status}
-                    </Badge>
-                  </td>
-                  <td className="hidden px-4 py-4 text-sm text-zinc-400 xl:table-cell">
-                    {formatRelative(file.createdAt)}
-                  </td>
-                  <td className="px-4 py-4">
-                    <div className="flex items-center justify-end gap-2">
-                      <Button
-                        variant="ghost"
-                        className="text-blue-400 hover:bg-blue-950/30 hover:text-blue-300"
-                        onClick={() => setPreviewFile(file)}
-                        title="Preview"
-                      >
-                        <FiEye className="h-5 w-5" />
-                      </Button>
-                      <Button
-                        variant="ghost"
-                        className="text-green-400 hover:bg-green-950/30 hover:text-green-300"
-                        onClick={async () => {
-                          const result = await downloadMutation.mutateAsync(
-                            file.id
-                          );
-                          window.open(
-                            result.url,
-                            "_blank",
-                            "noopener,noreferrer"
-                          );
-                        }}
-                        title="Download"
-                      >
-                        <FiDownload className="h-5 w-5" />
-                      </Button>
-                      <Button
-                        variant="ghost"
-                        className="text-red-400 hover:bg-red-950/30 hover:text-red-300"
-                        onClick={() => {
-                          if (confirm("Delete this file?")) {
-                            deleteMutation.mutate(file.id);
-                          }
-                        }}
-                        disabled={deleteMutation.isPending}
-                        title="Delete"
-                      >
-                        <FiTrash2 className="h-5 w-5" />
-                      </Button>
-                    </div>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+                      <FiGlobe className="h-4 w-4" />
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="h-8 w-8 text-green-400 hover:bg-green-950/40 hover:text-green-200 p-0"
+                      onClick={() => {
+                        const url = filesService.directDownloadUrl(file.id);
+                        window.open(url, "_blank", "noopener,noreferrer");
+                      }}
+                      title="Download"
+                    >
+                      <FiDownload className="h-4 w-4" />
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="h-8 w-8 text-red-400 hover:bg-red-950/40 hover:text-red-200 p-0"
+                      onClick={() => {
+                        if (confirm("Delete this file?")) {
+                          deleteMutation.mutate(file.id);
+                        }
+                      }}
+                      disabled={deleteMutation.isPending}
+                      title="Delete"
+                    >
+                      <FiTrash2 className="h-4 w-4" />
+                    </Button>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
         )}
       </div>
 
@@ -932,6 +942,15 @@ export default function FilesPage() {
         <FilePreview
           file={previewFile}
           onClose={() => setPreviewFile(null)}
+        />
+      )}
+
+      {/* Share Dialog */}
+      {shareFile && (
+        <ShareDialog
+          fileId={shareFile.id}
+          fileName={shareFile.name}
+          onClose={() => setShareFile(null)}
         />
       )}
     </div>

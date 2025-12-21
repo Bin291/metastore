@@ -1,6 +1,27 @@
-import { Expose } from 'class-transformer';
+import { Expose, Type } from 'class-transformer';
 import { SharePermission } from '../../../common/enums/share-permission.enum';
 import { ShareResourceType } from '../../../common/enums/share-resource-type.enum';
+import { FileVisibility } from '../../../common/enums/file-visibility.enum';
+
+export class ShareLinkResourceDto {
+  @Expose()
+  id: string;
+
+  @Expose()
+  name: string;
+
+  @Expose()
+  mimeType?: string | null;
+
+  @Expose()
+  isFolder: boolean;
+
+  @Expose()
+  size: string;
+
+  @Expose()
+  visibility: FileVisibility;
+}
 
 export class ShareLinkResponseDto {
   @Expose()
@@ -32,5 +53,9 @@ export class ShareLinkResponseDto {
 
   @Expose()
   createdAt: Date;
+
+  @Expose()
+  @Type(() => ShareLinkResourceDto)
+  resource?: ShareLinkResourceDto;
 }
 

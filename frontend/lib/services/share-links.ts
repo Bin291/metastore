@@ -4,6 +4,7 @@ import {
   ShareLink,
   SharePermission,
 } from '@/types/api';
+import type { PresignedUrlResponse } from './files';
 
 export interface CreateShareLinkPayload {
   resourceId: string;
@@ -56,6 +57,11 @@ export const shareLinksService = {
   access: (token: string, payload: AccessShareLinkPayload) =>
     api.post<ShareLink, AccessShareLinkPayload>(
       `/share-links/token/${token}/access`,
+      payload,
+    ),
+  download: (token: string, payload: AccessShareLinkPayload) =>
+    api.post<PresignedUrlResponse, AccessShareLinkPayload>(
+      `/share-links/token/${token}/download-url`,
       payload,
     ),
 };
