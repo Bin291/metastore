@@ -52,6 +52,14 @@ export default function SharedLinkPage() {
     await unlock(password);
   };
 
+  const triggerDownload = (url: string) => {
+    const a = document.createElement("a");
+    a.href = url;
+    a.target = "_blank";
+    a.rel = "noopener noreferrer";
+    a.click();
+  };
+
   const handleDownload = async () => {
     try {
       let url = downloadUrl;
@@ -61,7 +69,7 @@ export default function SharedLinkPage() {
         setDownloadUrl(url);
       }
       if (url) {
-        window.open(url, "_blank", "noopener,noreferrer");
+        triggerDownload(url);
       } else {
         setError("No download link available.");
       }
@@ -130,7 +138,10 @@ export default function SharedLinkPage() {
             </div>
 
             {downloadUrl && !link.resource?.isFolder && (
-              <div className="rounded-lg border border-zinc-800 bg-zinc-900/40 p-4">
+              <div
+                className="rounded-lg border border-zinc-800 bg-zinc-900/40 p-4 select-none"
+                onContextMenu={(e) => e.preventDefault()}
+              >
                 {isVideo && (
                   <div className="w-full" style={{ maxWidth: "1280px", margin: "0 auto" }}>
                     <CustomVideoPlayer src={downloadUrl} className="w-full" />
@@ -152,7 +163,7 @@ export default function SharedLinkPage() {
                     <img
                       src={downloadUrl}
                       alt={link.resource?.name || "shared file"}
-                      className="max-h-[480px] rounded-lg border border-zinc-800"
+                      className="max-h-[480px] rounded-lg border border-zinc-800 select-none pointer-events-none"
                     />
                   </div>
                 )}

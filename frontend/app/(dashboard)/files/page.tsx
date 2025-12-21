@@ -641,27 +641,6 @@ export default function FilesPage() {
         </div>
       </div>
 
-      {/* Upload Progress */}
-      {Object.keys(uploadProgress).length > 0 && (
-        <Card className="space-y-3 border-indigo-600/30 bg-indigo-950/20 p-4">
-          <h4 className="font-semibold text-white">Uploading...</h4>
-          {Object.entries(uploadProgress).map(([key, progress]) => (
-            <div key={key} className="space-y-1">
-              <div className="flex justify-between text-xs text-zinc-400">
-                <span>File upload</span>
-                <span>{progress}%</span>
-              </div>
-              <div className="h-2 overflow-hidden rounded-full bg-zinc-800">
-                <div
-                  className="h-full bg-gradient-to-r from-indigo-500 to-purple-500 transition-all"
-                  style={{ width: `${progress}%` }}
-                />
-              </div>
-            </div>
-          ))}
-        </Card>
-      )}
-
       {/* Create Folder Form */}
       {showCreateFolder && (
         <Card className="space-y-3 border-zinc-700 bg-zinc-800/50 p-4">

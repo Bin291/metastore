@@ -9,6 +9,7 @@ import { FiImage, FiFile, FiVideo, FiMusic, FiFileText, FiLock, FiGlobe, FiGrid,
 import { FilePreview } from "@/components/file-preview";
 import { ShareDialog } from "@/components/share-dialog";
 import { FileItem } from "@/types/api";
+import { useFileUpload } from "@/lib/hooks/use-file-upload";
 
 type ViewMode = "grid" | "list" | "mixed";
 type GroupMode = "grouped" | "all";
@@ -21,7 +22,10 @@ export default function DashboardPage() {
   const [selectedFiles, setSelectedFiles] = useState<Set<string>>(new Set());
   const [openMenuId, setOpenMenuId] = useState<string | null>(null);
   const [shareFile, setShareFile] = useState<FileItem | null>(null);
+  const [dragActive, setDragActive] = useState(false);
+  const [isUploading, setIsUploading] = useState(false);
   const queryClient = useQueryClient();
+  const { uploadFile } = useFileUpload();
   const [viewMode, setViewMode] = useState<ViewMode>(() => {
     // Load viewMode from localStorage
     if (typeof window !== 'undefined') {
@@ -181,6 +185,48 @@ export default function DashboardPage() {
       for (const fileId of selectedFiles) {
         await deleteMutation.mutateAsync(fileId);
       }
+    }
+  };
+
+  // Drag & drop upload (default private)
+  const handleDrag = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (e.type === "dragenter" || e.type === "dragover") {
+      setDragActive(true);
+    } else if (e.type === "dragleave") {
+      setDragActive(false);
+    }
+  };
+
+  const handleDrop = async (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setDragActive(false);
+
+    const files = e.dataTransfer.files;
+    if (!files || files.length === 0) return;
+
+    setIsUploading(true);
+    try {
+      for (let i = 0; i < files.length; i++) {
+        const file = files[i] as File & { webkitRelativePath?: string };
+        const path =
+          file.webkitRelativePath && file.webkitRelativePath.length > 0
+            ? file.webkitRelativePath
+            : file.name;
+
+        await uploadFile(file, {
+          path,
+          visibility: "private",
+          parentId: undefined,
+        });
+      }
+      queryClient.invalidateQueries({ queryKey: ["files"] });
+    } catch (error) {
+      console.error("Upload failed:", error);
+    } finally {
+      setIsUploading(false);
     }
   };
 
@@ -497,7 +543,17 @@ export default function DashboardPage() {
   };
 
   return (
-    <div className="max-w-7xl mx-auto space-y-6 px-4">
+    <div
+      className="relative max-w-7xl mx-auto space-y-6 px-4"
+      onDragEnter={handleDrag}
+      onDragOver={handleDrag}
+      onDragLeave={handleDrag}
+      onDrop={handleDrop}
+    >
+      {dragActive && (
+        <div className="pointer-events-none absolute inset-0 z-30 rounded-2xl border-2 border-dashed border-indigo-500 bg-indigo-500/10" />
+      )}
+
       {/* Filter Bar */}
       <div className="flex items-center justify-between flex-wrap gap-4">
         <div className="flex items-center gap-2">

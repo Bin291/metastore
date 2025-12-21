@@ -215,15 +215,10 @@ export function FilePreview({ file, onClose }: FilePreviewProps) {
           <Button
             variant="outline"
             size="sm"
-            onClick={async () => {
-              if (previewUrl) {
-                window.open(previewUrl, "_blank", "noopener,noreferrer");
-              } else {
-                const result = await downloadMutation.mutateAsync();
-                window.open(result.url, "_blank", "noopener,noreferrer");
-              }
+            onClick={() => {
+              const url = filesService.directDownloadUrl(file.id);
+              window.open(url, "_blank", "noopener,noreferrer");
             }}
-            disabled={downloadMutation.isPending}
           >
             Download
           </Button>
