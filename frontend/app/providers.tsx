@@ -6,6 +6,7 @@ import { ReactQueryDevtools } from '@tanstack/react-query-devtools';
 import { Toaster } from '@/components/ui/toast';
 import { UploadProvider } from '@/lib/contexts/upload-context';
 import { UploadPanel } from '@/components/upload-panel';
+import { I18nProvider } from '@/lib/i18n/use-i18n';
 
 type ProvidersProps = {
   children: ReactNode;
@@ -27,12 +28,14 @@ export function Providers({ children }: ProvidersProps) {
 
   return (
     <QueryClientProvider client={queryClient}>
-      <UploadProvider>
-        <Toaster />
-        {children}
-        <UploadPanel />
-        <ReactQueryDevtools initialIsOpen={false} />
-      </UploadProvider>
+      <I18nProvider>
+        <UploadProvider>
+          <Toaster />
+          {children}
+          <UploadPanel />
+          <ReactQueryDevtools initialIsOpen={false} />
+        </UploadProvider>
+      </I18nProvider>
     </QueryClientProvider>
   );
 }

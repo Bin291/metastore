@@ -5,24 +5,25 @@ import { useForm } from "react-hook-form";
 import { z } from "zod";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useInvitesStore } from "@/lib/stores/invites-store";
+import { usersService } from "@/lib/services/users";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { TimePicker } from "@/components/time-picker";
 import { InviteReviewModal } from "@/components/invite-review-modal";
+import { InviteLinkDialog } from "@/components/invite-link-dialog";
 import { formatRelative } from "@/lib/time";
 import { toast } from "@/components/ui/toast";
 
-const formSchema = z.object({
-  username: z.string().min(3).optional(),
-  password: z.string().min(6).optional(),
-  email: z.string().email(),
+const createUserSchema = z.object({
+  username: z.string().min(3, "Username must be at least 3 characters"),
+  password: z.string().min(6, "Password must be at least 6 characters"),
+  email: z.string().email("Invalid email address"),
   phone: z.string().optional(),
   role: z.enum(["user", "admin"]).default("user"),
 });
 
-type FormValues = z.infer<typeof formSchema>;
+type CreateUserFormValues = z.infer<typeof createUserSchema>;
 
 export default function AdminInvitesPage() {
   const {
@@ -32,16 +33,16 @@ export default function AdminInvitesPage() {
     filter,
     isLoading,
     fetchInvites,
-    createInvite,
     setSelectedInvite,
     setInviteLink,
     setFilter,
   } = useInvitesStore();
 
   const [localLoading, setLocalLoading] = useState(false);
+  const [showInviteLinkDialog, setShowInviteLinkDialog] = useState(false);
 
-  const form = useForm<FormValues>({
-    resolver: zodResolver(formSchema),
+  const form = useForm<CreateUserFormValues>({
+    resolver: zodResolver(createUserSchema),
     defaultValues: {
       role: "user",
     },
@@ -51,21 +52,29 @@ export default function AdminInvitesPage() {
     fetchInvites();
   }, [fetchInvites, filter]);
 
-  const handleCreateUser = async (values: FormValues) => {
+  const handleCreateUser = async (values: CreateUserFormValues) => {
     setLocalLoading(true);
     try {
-      // Tạo invite thay vì gọi API không tồn tại
-      const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(); // 24h
-      const invite = await createInvite(values.role, 1, expiresAt);
-      toast.success("Tạo link mời thành công");
-      setInviteLink(`${window.location.origin}/invites/accept/${invite.token}`);
+      await usersService.create({
+        username: values.username,
+        password: values.password,
+        email: values.email,
+        phone: values.phone,
+        role: values.role,
+      });
+      toast.success("User created successfully");
       form.reset({ role: "user" });
     } catch (error) {
-      toast.error("Tạo tài khoản thất bại!");
-      console.error("Failed to create invite:", error);
+      toast.error("Failed to create user");
+      console.error("Failed to create user:", error);
     } finally {
       setLocalLoading(false);
     }
+  };
+
+  const handleInviteLinkSuccess = (link: string) => {
+    setInviteLink(link);
+    setShowInviteLinkDialog(false);
   };
 
   // Separate invites by response status
@@ -95,11 +104,11 @@ export default function AdminInvitesPage() {
 
   return (
     <div className="max-w-7xl mx-auto space-y-6 px-4">
-      {/* Create Invite Form */}
+      {/* Create User Form */}
       <Card className="p-6">
-        <h2 className="text-lg font-semibold text-white">Generate Invitation Link</h2>
+        <h2 className="text-lg font-semibold text-white">Create User</h2>
         <p className="text-sm text-zinc-500 mt-1">
-          Create a new invitation link to send directly to users.
+          Create a new user account directly.
         </p>
 
         <form
@@ -142,11 +151,26 @@ export default function AdminInvitesPage() {
             </select>
           </label>
           <div className="md:col-span-2">
-            <Button type="submit" disabled={localLoading || isLoading} className="w-full">
-              {localLoading || isLoading ? "Creating..." : "Create User"}
+            <Button type="submit" disabled={localLoading} className="w-full">
+              {localLoading ? "Creating..." : "Create User"}
             </Button>
           </div>
         </form>
+      </Card>
+
+      {/* Generate Invite Link Section */}
+      <Card className="p-6">
+        <h2 className="text-lg font-semibold text-white">Generate Invitation Link</h2>
+        <p className="text-sm text-zinc-500 mt-1 mb-4">
+          Create an invitation link to send to users for self-registration.
+        </p>
+        <Button
+          variant="outline"
+          onClick={() => setShowInviteLinkDialog(true)}
+          className="w-full"
+        >
+          Generate Invite Link
+        </Button>
 
         {inviteLink && (
           <div className="mt-6 rounded-lg border border-green-800/30 bg-green-900/10 p-4">
@@ -319,6 +343,14 @@ export default function AdminInvitesPage() {
           onReject={() => {
             fetchInvites();
           }}
+        />
+      )}
+
+      {/* Invite Link Dialog */}
+      {showInviteLinkDialog && (
+        <InviteLinkDialog
+          onClose={() => setShowInviteLinkDialog(false)}
+          onSuccess={handleInviteLinkSuccess}
         />
       )}
     </div>

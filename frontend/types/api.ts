@@ -1,5 +1,6 @@
 export type UserRole = 'admin' | 'staff' | 'user';
 export type UserStatus = 'active' | 'disabled' | 'pending';
+export type SubscriptionPlan = 'free' | 'plus' | 'pro';
 
 export interface User {
   id: string;
@@ -7,9 +8,15 @@ export interface User {
   role: UserRole;
   status: UserStatus;
   email?: string | null;
+  fullName?: string | null;
+  phone?: string | null;
   bucketPrefix: string;
   profileMetadata?: Record<string, unknown> | null;
   lastLoginAt?: string | null;
+  subscriptionPlan?: SubscriptionPlan;
+  storageQuotaBytes?: string;
+  storageUsedBytes?: string;
+  subscriptionExpiresAt?: string | null;
   createdAt: string;
   updatedAt: string;
 }

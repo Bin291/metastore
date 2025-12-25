@@ -13,6 +13,7 @@ import { ShareLinksModule } from './modules/share-links/share-links.module';
 import { StorageModule } from './modules/storage/storage.module';
 import { NotificationsModule } from './modules/notifications/notifications.module';
 import { MediaModule } from './modules/media/media.module';
+import { PaymentsModule } from './modules/payments/payments.module';
 
 @Module({
   imports: [
@@ -56,6 +57,7 @@ import { MediaModule } from './modules/media/media.module';
     FilesModule,
     ShareLinksModule,
     NotificationsModule,
+    PaymentsModule,
   ],
   controllers: [AppController],
   providers: [AppService],

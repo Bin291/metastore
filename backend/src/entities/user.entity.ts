@@ -12,6 +12,7 @@ import { FileObject } from './file-object.entity';
 import { Notification } from './notification.entity';
 import { UserRole } from '../common/enums/user-role.enum';
 import { UserStatus } from '../common/enums/user-status.enum';
+import { SubscriptionPlan } from '../common/enums/subscription-plan.enum';
 
 @Entity({ name: 'users' })
 @Unique(['username'])
@@ -61,6 +62,22 @@ export class User extends BaseEntity {
 
   @Column({ name: 'refresh_token_hash', type: 'varchar', nullable: true })
   refreshTokenHash?: string | null;
+
+  @Column({
+    name: 'subscription_plan',
+    type: 'text',
+    default: SubscriptionPlan.FREE,
+  })
+  subscriptionPlan: SubscriptionPlan;
+
+  @Column({ name: 'storage_quota_bytes', type: 'bigint', default: 1073741824 }) // 1GB
+  storageQuotaBytes: string;
+
+  @Column({ name: 'storage_used_bytes', type: 'bigint', default: 0 })
+  storageUsedBytes: string;
+
+  @Column({ name: 'subscription_expires_at', type: 'datetime', nullable: true })
+  subscriptionExpiresAt?: Date | null;
 
   @OneToMany(() => Invite, (invite) => invite.createdBy, {
     cascade: false,

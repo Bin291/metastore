@@ -77,5 +77,12 @@ export const configuration = () => ({
     defaultPassword: process.env.DEFAULT_ADMIN_PASSWORD ?? 'admin123',
     defaultEmail: process.env.DEFAULT_ADMIN_EMAIL ?? undefined,
   },
+  payment: {
+    bankName: process.env.PAYMENT_BANK_NAME ?? 'Techcombank',
+    accountNumber: process.env.PAYMENT_BANK_ACCOUNT ?? '',
+    accountName: process.env.PAYMENT_BANK_ACCOUNT_NAME ?? '',
+    branchName: process.env.PAYMENT_BANK_BRANCH ?? '',
+    qrCodeEnabled: process.env.PAYMENT_QR_ENABLED !== 'false',
+  },
 });
 

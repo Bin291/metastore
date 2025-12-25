@@ -86,6 +86,26 @@ class EnvironmentVariables {
   @IsOptional()
   @IsString()
   AUTH_REFRESH_TOKEN_COOKIE?: string;
+
+  @IsOptional()
+  @IsString()
+  PAYMENT_BANK_NAME?: string;
+
+  @IsOptional()
+  @IsString()
+  PAYMENT_BANK_ACCOUNT?: string;
+
+  @IsOptional()
+  @IsString()
+  PAYMENT_BANK_ACCOUNT_NAME?: string;
+
+  @IsOptional()
+  @IsString()
+  PAYMENT_BANK_BRANCH?: string;
+
+  @IsOptional()
+  @IsBooleanString()
+  PAYMENT_QR_ENABLED?: string;
 }
 
 export function validateEnvironment(config: Record<string, unknown>) {

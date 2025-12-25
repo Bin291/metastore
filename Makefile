@@ -8,7 +8,7 @@ MINIO_CONSOLE_PORT=9001
 MINIO_VOLUME?=./minio
 
 ifeq ($(OS),Windows_NT)
-	MINIO_VOLUME_ABS := $(shell powershell -Command "[System.IO.Path]::GetFullPath('$(MINIO_VOLUME)')")
+	MINIO_VOLUME_ABS := $(shell powershell -NoProfile -Command "[System.IO.Path]::GetFullPath('$(MINIO_VOLUME)')")
 	MKDIR_CMD = if not exist $(MINIO_VOLUME) mkdir $(MINIO_VOLUME)
 	CMD_PREFIX = cmd /c
 else
@@ -19,6 +19,11 @@ endif
 
 minio-up:
 	$(MKDIR_CMD)
+ifeq ($(OS),Windows_NT)
+	-docker rm -f $(MINIO_CONTAINER) 2>nul
+else
+	-docker rm -f $(MINIO_CONTAINER) 2>/dev/null || true
+endif
 	docker run -d --rm \
 		--name $(MINIO_CONTAINER) \
 		-p $(MINIO_PORT):9000 \

@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { ConfigService } from '@nestjs/config';
@@ -19,6 +19,10 @@ export interface ListUsersOptions {
 export interface UpdateUserProfileInput {
   profileMetadata?: Record<string, unknown>;
   email?: string | null;
+  username?: string;
+  fullName?: string | null;
+  phone?: string | null;
+  avatarUrl?: string | null;
 }
 
 @Injectable()
@@ -196,15 +200,81 @@ export class UsersService {
       throw new NotFoundException('User not found');
     }
 
+    if (input.username !== undefined) {
+      // Check if username is already taken
+      const existingUser = await this.userRepository.findOne({
+        where: { username: input.username },
+      });
+      if (existingUser && existingUser.id !== userId) {
+        throw new BadRequestException('Username đã được sử dụng');
+      }
+      user.username = input.username;
+    }
+
     if (input.email !== undefined) {
+      // Check if email is already taken
+      if (input.email) {
+        const existingUser = await this.userRepository.findOne({
+          where: { email: input.email },
+        });
+        if (existingUser && existingUser.id !== userId) {
+          throw new BadRequestException('Email đã được sử dụng');
+        }
+      }
       user.email = input.email;
     }
 
+    if (input.fullName !== undefined) {
+      user.fullName = input.fullName;
+    }
+
+    if (input.phone !== undefined) {
+      user.phone = input.phone;
+    }
+
+    if (input.avatarUrl !== undefined) {
+      // Store avatar URL in profileMetadata
+      const metadata = user.profileMetadata || {};
+      user.profileMetadata = {
+        ...metadata,
+        avatarUrl: input.avatarUrl,
+      };
+    }
+
     if (input.profileMetadata !== undefined) {
-      user.profileMetadata = input.profileMetadata;
+      user.profileMetadata = {
+        ...(user.profileMetadata || {}),
+        ...input.profileMetadata,
+      };
     }
 
     return this.userRepository.save(user);
+  }
+
+  async changePassword(
+    userId: string,
+    currentPassword: string,
+    newPassword: string,
+  ): Promise<void> {
+    const user = await this.userRepository.findOne({ where: { id: userId } });
+    if (!user) {
+      throw new NotFoundException('User not found');
+    }
+
+    // Verify current password
+    const isPasswordValid = await argon2.verify(
+      user.passwordHash,
+      currentPassword,
+    );
+    if (!isPasswordValid) {
+      throw new BadRequestException('Mật khẩu hiện tại không đúng');
+    }
+
+    // Hash new password
+    const newPasswordHash = await argon2.hash(newPassword);
+    user.passwordHash = newPasswordHash;
+
+    await this.userRepository.save(user);
   }
 
   async setRefreshTokenHash(

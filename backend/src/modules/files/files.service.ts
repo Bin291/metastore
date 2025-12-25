@@ -24,6 +24,7 @@ import { AuditActorType } from '../../common/enums/audit-actor-type.enum';
 import { NotificationsService } from '../notifications/notifications.service';
 import { PresignedUrlResult } from '../storage/storage.service';
 import { MediaProcessingService } from '../media/media-processing.service';
+import { StorageQuotaService } from '../storage/storage-quota.service';
 import { InitiateUploadDto } from './dto/initiate-upload.dto';
 import { CompleteUploadDto } from './dto/complete-upload.dto';
 import * as path from 'path';
@@ -47,6 +48,7 @@ export class FilesService {
     private readonly auditLogService: AuditLogService,
     private readonly notificationsService: NotificationsService,
     private readonly mediaProcessingService: MediaProcessingService,
+    private readonly storageQuotaService: StorageQuotaService,
   ) {}
 
   async requestUpload(
@@ -758,6 +760,9 @@ export class FilesService {
     userId: string,
     dto: InitiateUploadDto,
   ): Promise<{ fileId: string; uploadId: string; uploadUrls: string[] }> {
+    // Check storage quota before upload
+    await this.storageQuotaService.validateQuota(userId, dto.fileSize);
+
     const visibility = dto.visibility ?? FileVisibility.PRIVATE;
     const bucketType = visibility === FileVisibility.PUBLIC ? BucketType.PUBLIC : BucketType.PRIVATE;
 
@@ -926,6 +931,9 @@ export class FilesService {
         chunked: true,
       },
     });
+
+    // Update storage used after successful upload
+    await this.storageQuotaService.updateStorageUsed(userId);
 
     return reloadedFile || updatedFile;
   }

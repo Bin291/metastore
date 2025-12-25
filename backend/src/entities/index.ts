@@ -5,4 +5,5 @@ export * from './share-link.entity';
 export * from './audit-log.entity';
 export * from './notification.entity';
 export * from './moderation-task.entity';
+export * from './subscription.entity';
 
