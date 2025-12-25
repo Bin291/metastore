@@ -15,6 +15,7 @@ import { FiUser, FiCreditCard, FiLock, FiGlobe, FiUpload, FiCheck } from 'react-
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
+import { toast } from '@/components/ui/toast';
 
 const profileSchema = z.object({
   username: z.string().min(3).max(64).regex(/^[a-zA-Z0-9_]+$/),
@@ -81,7 +82,7 @@ export default function SettingsPage() {
     mutationFn: usersService.updateProfile,
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['current-user'] });
-      alert(t('settings.profileSection.updateSuccess'));
+      toast.success(t('settings.profileSection.updateSuccess'));
     },
   });
 
@@ -89,7 +90,7 @@ export default function SettingsPage() {
     mutationFn: usersService.changePassword,
     onSuccess: () => {
       passwordForm.reset();
-      alert(t('settings.securitySection.changePasswordSuccess'));
+      toast.success(t('settings.securitySection.changePasswordSuccess'));
     },
   });
 
@@ -98,14 +99,14 @@ export default function SettingsPage() {
     if (file) {
       // Validate file size (max 2MB)
       if (file.size > 2 * 1024 * 1024) {
-        alert(t('settings.profileSection.avatarHint'));
+        toast.error(t('settings.profileSection.avatarHint'));
         return;
       }
       
       // Validate file type - accept all image types including GIF and WebP
       const allowedTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/gif', 'image/webp'];
       if (!allowedTypes.includes(file.type.toLowerCase())) {
-        alert(t('common.error'));
+        toast.error(t('common.error'));
         return;
       }
 
@@ -159,7 +160,7 @@ export default function SettingsPage() {
       // Invalidate user query to refresh avatar
       queryClient.invalidateQueries({ queryKey: ['current-user'] });
     } catch (error: any) {
-      alert(error?.message || t('common.error'));
+      toast.error(error?.message || t('common.error'));
     }
   };
 
@@ -170,7 +171,7 @@ export default function SettingsPage() {
         newPassword: data.newPassword,
       });
     } catch (error: any) {
-      alert(error?.message || t('common.error'));
+      toast.error(error?.message || t('common.error'));
     }
   };
 
