@@ -14,6 +14,10 @@ import { StorageModule } from './modules/storage/storage.module';
 import { NotificationsModule } from './modules/notifications/notifications.module';
 import { MediaModule } from './modules/media/media.module';
 import { PaymentsModule } from './modules/payments/payments.module';
+import { OutboxModule } from './modules/outbox/outbox.module';
+import { SagaModule } from './modules/saga/saga.module';
+import { IdempotencyModule } from './modules/idempotency/idempotency.module';
+import { CacheModule } from './modules/cache/cache.module';
 
 @Module({
   imports: [
@@ -49,6 +53,10 @@ import { PaymentsModule } from './modules/payments/payments.module';
         };
       },
     }),
+    CacheModule,
+    OutboxModule,
+    SagaModule,
+    IdempotencyModule,
     StorageModule,
     MediaModule,
     UsersModule,

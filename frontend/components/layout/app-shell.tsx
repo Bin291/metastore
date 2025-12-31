@@ -42,8 +42,17 @@ export function AppShell({ children }: AppShellProps) {
       setIsLoadingNotifications(true);
       const data = await notificationsService.listNotifications();
       setNotifications(data);
-    } catch (error) {
-      console.error('Error fetching notifications:', error);
+    } catch (error: any) {
+      // Don't log 401 errors - they're handled by token refresh
+      // If refresh fails, user will be redirected to login
+      if (error?.status !== 401) {
+        console.error('Error fetching notifications:', error);
+      }
+      // If 401 and refresh failed, stop fetching notifications
+      if (error?.status === 401) {
+        // Clear interval will be handled by useEffect cleanup
+        return;
+      }
     } finally {
       setIsLoadingNotifications(false);
     }
@@ -51,14 +60,52 @@ export function AppShell({ children }: AppShellProps) {
 
   // Fetch notifications on mount and every 10 seconds
   useEffect(() => {
-    if (!user) return;
+    if (!user) {
+      setNotifications([]);
+      return;
+    }
+    
+    let intervalId: NodeJS.Timeout | null = null;
+    let isMounted = true;
     
     // Fetch immediately on mount
-    fetchNotifications();
+    fetchNotifications().catch((error) => {
+      // If 401, stop setting up interval
+      if (error?.status === 401) {
+        return;
+      }
+    });
 
     // Set up interval to fetch every 10 seconds
-    const interval = setInterval(fetchNotifications, 10000);
-    return () => clearInterval(interval);
+    // Only set up interval if user is still logged in
+    const setupInterval = () => {
+      if (isMounted && user) {
+        intervalId = setInterval(() => {
+          if (isMounted && user) {
+            fetchNotifications().catch((error) => {
+              // If 401, clear interval and stop fetching
+              if (error?.status === 401) {
+                if (intervalId) {
+                  clearInterval(intervalId);
+                  intervalId = null;
+                }
+              }
+            });
+          }
+        }, 10000);
+      }
+    };
+    
+    // Delay interval setup slightly to avoid immediate fetch
+    const timeoutId = setTimeout(setupInterval, 1000);
+    
+    return () => {
+      isMounted = false;
+      if (intervalId) {
+        clearInterval(intervalId);
+      }
+      clearTimeout(timeoutId);
+    };
   }, [user, fetchNotifications]);
 
   // Refresh user data when subscription activation notification is received
